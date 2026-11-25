@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>SG Transit Training Lab — 4-Module 3D Suite</title>
+
+  <!-- Google Fonts (Inter) & Tailwind CSS CDN -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #0b121e;
+      color: #f8fafc;
+      user-select: none;
+    }
+
+    /* Dark Glassmorphism Top Header & Popover */
+    .glass-bar {
+      background: rgba(15, 23, 42, 0.88);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+      box-shadow: 0 8px 28px -8px rgba(0, 0, 0, 0.55);
+    }
+
+    .glass-popover {
+      background: rgba(15, 23, 42, 0.94);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid rgba(148, 163, 184, 0.24);
+      box-shadow: 0 20px 48px -12px rgba(0, 0, 0, 0.72), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+
+    /* Hidden Scrollbar for Horizontal Pill Tab Strip */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    /* Subtle Status Pulse */
+    @keyframes statusPulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.45; transform: scale(0.85); }
+    }
+    .animate-status-pulse {
+      animation: statusPulse 2s infinite ease-in-out;
+    }
+
+    /* Smooth Loading Spinner */
+    @keyframes spinRing {
+      to { transform: rotate(360deg); }
+    }
+    .loader-ring {
+      animation: spinRing 0.85s linear infinite;
+    }
+
+    /* Active Tab Pill Transition */
+    .module-tab {
+      position: relative;
+      transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.12s ease;
+    }
+    .module-tab:active {
+      transform: scale(0.98);
+    }
+
+    /* Popover Transition */
+    .popover-hidden {
+      opacity: 0;
+      transform: translateY(-6px) scale(0.98);
+      pointer-events: none;
+    }
+    .popover-visible {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      pointer-events: auto;
+    }
+  </style>
+</head>
+<body class="flex flex-col w-screen h-screen overflow-hidden bg-[#0b121e]">
+
+  <!-- =========================================================================
+       COMPACT 56px TOP GLASSMORPHISM HEADER BAR
+       ========================================================================= -->
+  <header class="glass-bar h-14 shrink-0 px-3 sm:px-4 z-30 flex items-center justify-between gap-2 sm:gap-4">
+
+    <!-- Left: Project Suite Badge + Emerald Live Status -->
+    <div class="flex items-center gap-2.5 shrink-0">
+      <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-[#00897B] to-[#0f2942] border border-teal-400/35 flex items-center justify-center shadow-inner shrink-0">
+        <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="4" y="3" width="16" height="14" rx="3" />
+          <path d="M4 11h16" />
+          <circle cx="8.5" cy="14.5" r="1" fill="currentColor" />
+          <circle cx="15.5" cy="14.5" r="1" fill="currentColor" />
+          <path d="M8 17l-2 4M16 17l2 4" stroke-linecap="round" />
+        </svg>
+      </div>
+      <div class="hidden md:flex flex-col leading-tight">
+        <div class="flex items-center gap-2">
+          <span class="text-xs sm:text-sm font-bold tracking-tight text-white">Transit Lab 3D</span>
+          <span class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-status-pulse" title="Suite Ready"></span>
+        </div>
+        <span class="text-[10px] font-medium text-slate-400 tracking-wide">4-Module Suite</span>
+      </div>
+    </div>
+
+    <!-- Center: 4 Horizontal Module Pill Tabs (Scrollable on Mobile) -->
+    <nav id="module-tabs"
+      class="flex-1 min-w-0 flex items-center justify-start lg:justify-center gap-1.5 overflow-x-auto no-scrollbar py-1"
+      role="tablist"
+      aria-label="3D Transit Training Modules">
+      <!-- Tabs rendered dynamically from MODULES config -->
+    </nav>
+
+    <!-- Right: Utility Controls (Reload, Fullscreen, Info/Help Popover) -->
+    <div class="flex items-center gap-1.5 shrink-0">
+      <!-- Reload Active Module -->
+      <button id="btn-reload" type="button" title="Reload Current Module"
+        class="h-9 px-2.5 sm:px-3 rounded-xl bg-slate-800/80 hover:bg-slate-700/90 text-slate-200 hover:text-white border border-slate-600/40 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer">
+        <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8" stroke-linecap="round" stroke-linejoin="round" />
+          <path d="M3 3v5h5" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span class="hidden xl:inline">Reload Module</span>
+      </button>
+
+      <!-- Fullscreen Toggle -->
+      <button id="btn-fullscreen" type="button" title="Toggle Fullscreen"
+        class="h-9 w-9 rounded-xl bg-slate-800/80 hover:bg-slate-700/90 text-slate-200 hover:text-white border border-slate-600/40 flex items-center justify-center transition-colors cursor-pointer"
+        aria-label="Toggle Fullscreen">
+        <svg id="icon-fs-enter" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <svg id="icon-fs-exit" class="w-4 h-4 hidden text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M8 3v3a2 2 0 01-2 2H3m18 0h-3a2 2 0 01-2-2V3m0 18v-3a2 2 0 012-2h3M3 16h3a2 2 0 012 2v3" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </button>
+
+      <!-- Info / Help Popover Toggle -->
+      <button id="btn-help" type="button" title="Folder Structure & Shortcuts"
+        class="h-9 w-9 rounded-xl bg-slate-800/80 hover:bg-slate-700/90 text-slate-300 hover:text-white border border-slate-600/40 flex items-center justify-center transition-colors cursor-pointer"
+        aria-expanded="false"
+        aria-controls="help-popover"
+        aria-label="Suite Info & Shortcuts">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 16v-4m0-4h.01" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- =========================================================================
+       INFO / HELP POPOVER (Folder Structure + Keyboard Shortcuts)
+       ========================================================================= -->
+  <aside id="help-popover"
+    class="glass-popover fixed top-16 right-3 z-40 w-[calc(100vw-1.5rem)] sm:w-[390px] rounded-2xl p-4 transition-all duration-200 popover-hidden"
+    role="dialog"
+    aria-label="Suite Setup & Keyboard Shortcuts">
+    <div class="flex items-center justify-between pb-2.5 border-b border-slate-700/70">
+      <div>
+        <h2 class="text-xs font-bold uppercase tracking-wider text-emerald-400">Suite Setup &amp; Controls</h2>
+        <p class="text-[11px] text-slate-300 mt-0.5">Place all 5 HTML files in the same local folder</p>
+      </div>
+      <button id="btn-help-close" type="button"
+        class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/60 transition-colors cursor-pointer"
+        aria-label="Close help">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" />
+        </svg>
+      </button>
+    </div>
+
+    <!-- Expected Folder Structure -->
+    <div class="mt-3">
+      <div class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Expected Folder Structure</div>
+      <div class="rounded-xl bg-slate-950/80 border border-slate-800 p-3 font-mono text-[11px] leading-relaxed text-slate-300 overflow-x-auto">
+        <div class="text-slate-400">transit-lab-suite/</div>
+        <div class="pl-3 text-emerald-300">├── index.html <span class="text-slate-500">(this launcher)</span></div>
+        <div class="pl-3">├── simplygo_moveable_transit_kiosk_module_1.html</div>
+        <div class="pl-3">├── module_2_platform_differentiation_route_navigation.html</div>
+        <div class="pl-3">├── module_3_in_carriage_route_display_5_screen_virtual_train_box.html</div>
+        <div class="pl-3">└── module_4_portable_floor_to_ceiling_pole_transit_card_reader.html</div>
+      </div>
+    </div>
+
+    <!-- Keyboard Shortcuts -->
+    <div class="mt-3.5">
+      <div class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Presentation Shortcuts</div>
+      <div class="grid grid-cols-2 gap-1.5 text-[11px]">
+        <div class="flex items-center justify-between rounded-xl bg-slate-800/60 border border-slate-700/60 px-2.5 py-1.5">
+          <span class="text-slate-300">SimplyGo Kiosk</span>
+          <kbd class="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-600 text-[10px] font-bold text-teal-300">1</kbd>
+        </div>
+        <div class="flex items-center justify-between rounded-xl bg-slate-800/60 border border-slate-700/60 px-2.5 py-1.5">
+          <span class="text-slate-300">Platform PIDS</span>
+          <kbd class="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-600 text-[10px] font-bold text-red-400">2</kbd>
+        </div>
+        <div class="flex items-center justify-between rounded-xl bg-slate-800/60 border border-slate-700/60 px-2.5 py-1.5">
+          <span class="text-slate-300">Virtual Train Box</span>
+          <kbd class="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-600 text-[10px] font-bold text-rose-400">3</kbd>
+        </div>
+        <div class="flex items-center justify-between rounded-xl bg-slate-800/60 border border-slate-700/60 px-2.5 py-1.5">
+          <span class="text-slate-300">Pole Card Reader</span>
+          <kbd class="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-600 text-[10px] font-bold text-amber-300">4</kbd>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-3 pt-2.5 border-t border-slate-800 flex items-center justify-between text-[10px] text-slate-400">
+      <span>WebGL &amp; Audio contexts auto-dispose on switch</span>
+      <span class="text-emerald-400 font-semibold">Isolated Frames</span>
+    </div>
+  </aside>
+
+  <!-- Subtle Notification Toast (e.g., Reloading / Fullscreen notice) -->
+  <div id="suite-toast"
+    class="glass-popover fixed bottom-4 left-1/2 -translate-x-1/2 z-40 rounded-xl px-4 py-2 text-xs font-medium text-slate-100 flex items-center gap-2 transition-all duration-250 opacity-0 translate-y-2 pointer-events-none">
+    <span id="suite-toast-dot" class="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
+    <span id="suite-toast-text">Module Loaded</span>
+  </div>
+
+  <!-- =========================================================================
+       MAIN 3D MODULE VIEWPORT CONTAINER (Hosts Single Active Isolated Iframe)
+       ========================================================================= -->
+  <main id="viewport-container" class="relative flex-1 w-full overflow-hidden bg-[#0b121e]">
+    <!-- Dedicated mount host so iframe destruction/recreation is clean and deterministic -->
+    <div id="iframe-host" class="w-full h-full"></div>
+
+    <!-- Smooth Loading Overlay (Fades out cleanly on iframe 'load' event) -->
+    <div id="loading-overlay"
+      class="absolute inset-0 z-20 flex flex-col items-center justify-center bg-[#0b121e]/92 backdrop-blur-sm transition-opacity duration-300 opacity-100">
+      <div class="relative w-12 h-12 flex items-center justify-center">
+        <div class="absolute inset-0 rounded-full border-2 border-slate-700/70"></div>
+        <div id="loading-spinner" class="loader-ring absolute inset-0 rounded-full border-2 border-transparent border-t-[#00897B] border-r-[#00897B]/60"></div>
+        <span id="loading-badge" class="text-[11px] font-extrabold text-white">M1</span>
+      </div>
+      <div id="loading-title" class="mt-3.5 text-sm font-bold text-white tracking-tight">SimplyGo Kiosk</div>
+      <div id="loading-subtitle" class="mt-0.5 text-xs text-slate-400">Initializing 3D environment &amp; audio engine...</div>
+    </div>
+  </main>
+
+  <!-- =========================================================================
+       MODULAR SUITE LAUNCHER CONTROLLER
+       ========================================================================= -->
+  <script>
+    (function () {
+      'use strict';
+
+      /**
+       * 1. EXACT 4-MODULE CONFIGURATION
+       * Ensure all 4 local HTML files sit in the exact same directory as index.html.
+       */
+      const MODULES = [
+        {
+          id: 'm1',
+          badge: 'M1',
+          title: 'SimplyGo Kiosk',
+          subtitle: 'Ticketing & Top-Up Station',
+          accent: '#00897B',
+          file: 'simplygo_moveable_transit_kiosk_module_1.html'
+        },
+        {
+          id: 'm2',
+          badge: 'M2',
+          title: 'Platform PIDS & Map',
+          subtitle: 'Platform Differentiation',
+          accent: '#D42E12',
+          file: 'module_2_platform_differentiation_route_navigation.html'
+        },
+        {
+          id: 'm3',
+          badge: 'M3',
+          title: 'Virtual Train Box',
+          subtitle: '5-Screen In-Carriage Sim',
+          accent: '#DC2626',
+          file: 'module_3_in_carriage_route_display_5_screen_virtual_train_box.html'
+        },
+        {
+          id: 'm4',
+          badge: 'M4',
+          title: 'Pole Card Reader',
+          subtitle: 'Portable Stanchion Validator',
+          accent: '#F2B705',
+          file: 'module_4_portable_floor_to_ceiling_pole_transit_card_reader.html'
+        }
+      ];
+
+      /**
+       * 2. SUITE LAUNCHER APPLICATION CLASS
+       */
+      class TransitLabSuiteLauncher {
+        constructor() {
+          this.tabsContainer = document.getElementById('module-tabs');
+          this.iframeHost = document.getElementById('iframe-host');
+          this.loadingOverlay = document.getElementById('loading-overlay');
+          this.loadingSpinner = document.getElementById('loading-spinner');
+          this.loadingBadge = document.getElementById('loading-badge');
+          this.loadingTitle = document.getElementById('loading-title');
+          this.loadingSubtitle = document.getElementById('loading-subtitle');
+          this.helpPopover = document.getElementById('help-popover');
+          this.helpButton = document.getElementById('btn-help');
+
+          this.activeModuleId = null;
+          this.activeIframe = null;
+          this.loadingFallbackTimer = null;
+          this.toastTimer = null;
+          this.helpOpen = false;
+
+          this.renderTabs();
+          this.bindControls();
+          this.loadFromHashOrDefault();
+        }
+
+        /** Utility: converts hex accent (#RRGGBB) to rgba(r,g,b,a) */
+        hexToRgba(hex, alpha) {
+          const clean = hex.replace('#', '');
+          const r = parseInt(clean.substring(0, 2), 16);
+          const g = parseInt(clean.substring(2, 4), 16);
+          const b = parseInt(clean.substring(4, 6), 16);
+          return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        }
+
+        /** Render the 4 sleek horizontal pill tabs in the top bar */
+        renderTabs() {
+          this.tabsContainer.innerHTML = '';
+
+          MODULES.forEach((mod, index) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.dataset.moduleId = mod.id;
+            btn.setAttribute('role', 'tab');
+            btn.setAttribute('aria-selected', 'false');
+            btn.title = `${mod.badge}: ${mod.title} — ${mod.subtitle} (Shortcut: ${index + 1})`;
+            btn.className = 'module-tab group px-3 py-1.5 rounded-xl flex items-center gap-2 whitespace-nowrap border border-transparent text-slate-300 hover:text-white hover:bg-slate-800/80 cursor-pointer shrink-0';
+
+            // Badge contrast adjustment for bright yellow M4 badge
+            const badgeTextColor = mod.id === 'm4' ? '#0f172a' : '#ffffff';
+
+            btn.innerHTML = `
+              <span class="tab-badge px-1.5 py-0.5 rounded-md text-[10px] font-extrabold tracking-wide shrink-0 transition-all"
+                style="background-color: ${mod.accent}; color: ${badgeTextColor};">
+                ${mod.badge}
+              </span>
+              <span class="flex flex-col text-left leading-tight">
+                <span class="text-xs font-semibold tracking-tight">${mod.title}</span>
+                <span class="hidden 2xl:block text-[10px] text-slate-400 font-normal">${mod.subtitle}</span>
+              </span>
+            `;
+
+            btn.addEventListener('click', () => {
+              this.activateModule(mod.id, { forceReload: false });
+            });
+
+            this.tabsContainer.appendChild(btn);
+          });
+        }
+
+        /** Update visual active state, accent glow & aria attributes on all tabs */
+        updateTabStyles(activeMod) {
+          const buttons = this.tabsContainer.querySelectorAll('.module-tab');
+          buttons.forEach((btn) => {
+            const isActive = btn.dataset.moduleId === activeMod.id;
+            btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+
+            if (isActive) {
+              btn.style.backgroundColor = this.hexToRgba(activeMod.accent, 0.18);
+              btn.style.borderColor = this.hexToRgba(activeMod.accent, 0.65);
+              btn.style.boxShadow = `0 0 18px -4px ${this.hexToRgba(activeMod.accent, 0.55)}`;
+              btn.classList.add('text-white');
+              btn.classList.remove('text-slate-300', 'border-transparent');
+            } else {
+              btn.style.backgroundColor = '';
+              btn.style.borderColor = '';
+              btn.style.boxShadow = '';
+              btn.classList.remove('text-white');
+              btn.classList.add('text-slate-300', 'border-transparent');
+            }
+          });
+        }
+
+        /**
+         * CRITICAL WEBGL & WEB AUDIO CLEANUP:
+         * Explicitly navigates the outgoing iframe to 'about:blank' and removes it
+         * from the DOM so its GPU WebGL context, requestAnimationFrame loops, and
+         * Web Audio API AudioContext are fully released before mounting the next module.
+         */
+        teardownActiveIframe() {
+          if (this.loadingFallbackTimer) {
+            clearTimeout(this.loadingFallbackTimer);
+            this.loadingFallbackTimer = null;
+          }
+
+          if (this.activeIframe) {
+            try {
+              this.activeIframe.onload = null;
+              this.activeIframe.onerror = null;
+              this.activeIframe.src = 'about:blank';
+            } catch (err) {
+              console.warn('Iframe teardown warning:', err);
+            }
+            if (this.activeIframe.parentNode) {
+              this.activeIframe.parentNode.removeChild(this.activeIframe);
+            }
+            this.activeIframe = null;
+          }
+
+          // Guarantee empty host
+          this.iframeHost.innerHTML = '';
+        }
+
+        /** Display loading overlay branded with the incoming module's accent & title */
+        showLoadingOverlay(mod) {
+          this.loadingBadge.textContent = mod.badge;
+          this.loadingTitle.textContent = `${mod.title}`;
+          this.loadingSubtitle.textContent = `${mod.subtitle} — Loading 3D simulation...`;
+          this.loadingSpinner.style.borderTopColor = mod.accent;
+          this.loadingSpinner.style.borderRightColor = this.hexToRgba(mod.accent, 0.55);
+
+          this.loadingOverlay.classList.remove('pointer-events-none', 'opacity-0');
+          this.loadingOverlay.classList.add('opacity-100');
+        }
+
+        /** Smoothly fade out loading overlay once iframe finishes loading */
+        hideLoadingOverlay() {
+          if (this.loadingFallbackTimer) {
+            clearTimeout(this.loadingFallbackTimer);
+            this.loadingFallbackTimer = null;
+          }
+          this.loadingOverlay.classList.remove('opacity-100');
+          this.loadingOverlay.classList.add('opacity-0', 'pointer-events-none');
+        }
+
+        /** Activate a module by ID, tearing down the previous frame and mounting a fresh iframe */
+        activateModule(moduleId, { forceReload = false, updateHash = true } = {}) {
+          const mod = MODULES.find((m) => m.id === moduleId) || MODULES[0];
+
+          if (!forceReload && this.activeModuleId === mod.id && this.activeIframe) {
+            return;
+          }
+
+          this.activeModuleId = mod.id;
+          this.updateTabStyles(mod);
+          this.showLoadingOverlay(mod);
+
+          // Persist active module in URL hash (#m1..#m4)
+          if (updateHash && window.location.hash !== `#${mod.id}`) {
+            try {
+              window.history.replaceState(null, '', `#${mod.id}`);
+            } catch (_) {
+              window.location.hash = mod.id;
+            }
+          }
+
+          // 1. Completely destroy previous iframe to release WebGL & Audio contexts
+          this.teardownActiveIframe();
+
+          // 2. Mount a brand-new isolated iframe on next animation frame
+          requestAnimationFrame(() => {
+            const iframe = document.createElement('iframe');
+            iframe.className = 'w-full h-full border-0 block bg-[#0b121e]';
+            iframe.title = `${mod.badge}: ${mod.title} — ${mod.subtitle}`;
+            iframe.allow = 'autoplay; fullscreen';
+            iframe.setAttribute('allowfullscreen', '');
+
+            iframe.onload = () => {
+              // Slight delay lets initial Three.js canvas frame paint before overlay lifts
+              setTimeout(() => this.hideLoadingOverlay(), 140);
+            };
+
+            iframe.onerror = () => {
+              this.hideLoadingOverlay();
+              this.showToast(`Could not load ${mod.file}`, '#ef4444');
+            };
+
+            // Safety fallback so overlay never gets stuck if local file load behaves unexpectedly
+            this.loadingFallbackTimer = setTimeout(() => {
+              this.hideLoadingOverlay();
+            }, 3500);
+
+            iframe.src = mod.file;
+            this.iframeHost.appendChild(iframe);
+            this.activeIframe = iframe;
+          });
+        }
+
+        /** Determine initial module from URL hash (#m1..#m4) or default to M1 */
+        loadFromHashOrDefault() {
+          const hashId = (window.location.hash || '').replace('#', '').toLowerCase();
+          const matched = MODULES.find((m) => m.id === hashId);
+          this.activateModule(matched ? matched.id : 'm1', { forceReload: true, updateHash: true });
+        }
+
+        /** Toggle Fullscreen Mode cleanly using Fullscreen API */
+        async toggleFullscreen() {
+          try {
+            if (!document.fullscreenElement) {
+              await document.documentElement.requestFullscreen();
+            } else {
+              await document.exitFullscreen();
+            }
+          } catch (err) {
+            this.showToast('Fullscreen is restricted in this browser view', '#f59e0b');
+          }
+        }
+
+        /** Sync Fullscreen button icons with document.fullscreenElement */
+        syncFullscreenIcon() {
+          const isFs = Boolean(document.fullscreenElement);
+          document.getElementById('icon-fs-enter').classList.toggle('hidden', isFs);
+          document.getElementById('icon-fs-exit').classList.toggle('hidden', !isFs);
+        }
+
+        /** Open / Close the Info & Shortcuts Popover */
+        setHelpPopover(open) {
+          this.helpOpen = open;
+          this.helpButton.setAttribute('aria-expanded', open ? 'true' : 'false');
+          this.helpButton.classList.toggle('border-emerald-400/60', open);
+          this.helpButton.classList.toggle('text-emerald-300', open);
+
+          if (open) {
+            this.helpPopover.classList.remove('popover-hidden');
+            this.helpPopover.classList.add('popover-visible');
+          } else {
+            this.helpPopover.classList.remove('popover-visible');
+            this.helpPopover.classList.add('popover-hidden');
+          }
+        }
+
+        /** Subtle bottom toast notification (no browser alert() ever used) */
+        showToast(message, dotColor = '#10b981') {
+          const toast = document.getElementById('suite-toast');
+          document.getElementById('suite-toast-text').textContent = message;
+          document.getElementById('suite-toast-dot').style.backgroundColor = dotColor;
+
+          toast.classList.remove('opacity-0', 'translate-y-2');
+          toast.classList.add('opacity-100', 'translate-y-0');
+
+          if (this.toastTimer) clearTimeout(this.toastTimer);
+          this.toastTimer = setTimeout(() => {
+            toast.classList.remove('opacity-100', 'translate-y-0');
+            toast.classList.add('opacity-0', 'translate-y-2');
+          }, 2400);
+        }
+
+        /** Bind header buttons, hashchange, outside-click dismissal & 1-4 keyboard shortcuts */
+        bindControls() {
+          // Reload active module
+          document.getElementById('btn-reload').addEventListener('click', () => {
+            if (!this.activeModuleId) return;
+            const mod = MODULES.find((m) => m.id === this.activeModuleId);
+            this.activateModule(this.activeModuleId, { forceReload: true, updateHash: false });
+            if (mod) this.showToast(`Reloading ${mod.badge}: ${mod.title}`, mod.accent);
+          });
+
+          // Fullscreen toggle
+          document.getElementById('btn-fullscreen').addEventListener('click', () => {
+            this.toggleFullscreen();
+          });
+          document.addEventListener('fullscreenchange', () => this.syncFullscreenIcon());
+
+          // Help / Info popover
+          this.helpButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.setHelpPopover(!this.helpOpen);
+          });
+          document.getElementById('btn-help-close').addEventListener('click', () => {
+            this.setHelpPopover(false);
+          });
+          document.addEventListener('click', (e) => {
+            if (this.helpOpen && !this.helpPopover.contains(e.target) && !this.helpButton.contains(e.target)) {
+              this.setHelpPopover(false);
+            }
+          });
+
+          // React to manual URL hash changes (e.g., browser back/forward)
+          window.addEventListener('hashchange', () => {
+            const hashId = (window.location.hash || '').replace('#', '').toLowerCase();
+            if (MODULES.some((m) => m.id === hashId) && hashId !== this.activeModuleId) {
+              this.activateModule(hashId, { forceReload: false, updateHash: false });
+            }
+          });
+
+          // Presentation Keyboard Shortcuts: keys 1, 2, 3, 4 + Esc to close popover
+          window.addEventListener('keydown', (e) => {
+            if (e.metaKey || e.ctrlKey || e.altKey) return;
+            const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+            if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+
+            if (e.key === 'Escape' && this.helpOpen) {
+              this.setHelpPopover(false);
+              return;
+            }
+
+            const keyToIndex = { '1': 0, '2': 1, '3': 2, '4': 3 };
+            if (keyToIndex[e.key] !== undefined) {
+              const targetMod = MODULES[keyToIndex[e.key]];
+              if (targetMod) {
+                this.activateModule(targetMod.id, { forceReload: false });
+              }
+            }
+          });
+        }
+      }
+
+      /* =========================================================================
+       * 3. BOOTSTRAP ON WINDOW LOAD
+       * ========================================================================= */
+      window.onload = function () {
+        try {
+          new TransitLabSuiteLauncher();
+        } catch (err) {
+          console.error('Failed to initialize Transit Lab 3D Suite Launcher:', err);
+        }
+      };
+    })();
+  </script>
+</body>
+</html>

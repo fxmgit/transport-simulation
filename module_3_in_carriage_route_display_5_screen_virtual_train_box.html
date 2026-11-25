@@ -1,0 +1,2586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Module 3: In-Carriage Route Display &amp; 5-Screen Virtual Train Box</title>
+
+  <!-- Fonts & Tailwind CSS CDN -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Three.js r128 & OrbitControls CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #0f172a;
+      color: #f8fafc;
+      user-select: none;
+    }
+
+    #canvas-container {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 1;
+    }
+
+    #canvas-container canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      outline: none;
+    }
+
+    /* Translucent Glassmorphism HUD Surfaces */
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.78);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      box-shadow: 0 12px 34px -8px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+
+    /* Realistic Matte-Charcoal 2.4GHz RF Pocket Clicker Widget */
+    .rf-clicker {
+      background: linear-gradient(165deg, #2b3340 0%, #171c24 58%, #0f131a 100%);
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      box-shadow:
+        0 20px 44px -10px rgba(0, 0, 0, 0.78),
+        inset 0 1px 1px rgba(255, 255, 255, 0.14),
+        inset 0 -3px 6px rgba(0, 0, 0, 0.65);
+    }
+
+    .rf-btn {
+      box-shadow: 0 3px 0 rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+      transition: transform 0.08s ease, box-shadow 0.08s ease, background-color 0.15s ease;
+    }
+
+    .rf-btn:active {
+      transform: translateY(2px);
+      box-shadow: 0 1px 0 rgba(0, 0, 0, 0.65), inset 0 1px 2px rgba(0, 0, 0, 0.4);
+    }
+
+    @keyframes rfTxBlink {
+      0%, 100% { opacity: 1; background-color: #10b981; box-shadow: 0 0 10px #10b981, 0 0 18px #34d399; }
+      50% { opacity: 0.25; background-color: #064e3b; box-shadow: none; }
+    }
+    .rf-tx-active {
+      animation: rfTxBlink 0.16s linear 3;
+    }
+
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    #hover-tooltip {
+      position: fixed;
+      z-index: 35;
+      pointer-events: none;
+      transform: translate(-50%, -140%);
+      transition: opacity 0.14s ease;
+    }
+  </style>
+</head>
+<body>
+  <!-- Full-Viewport 3D WebGL Viewport -->
+  <div id="canvas-container" aria-label="Module 3 Virtual Train Box 3D Simulation"></div>
+
+  <!-- 3D Raycast Hover Tooltip -->
+  <div id="hover-tooltip" class="glass-panel rounded-xl px-3 py-1.5 text-xs font-semibold text-emerald-200 opacity-0 whitespace-nowrap border-emerald-400/40">
+    Click to interact
+  </div>
+
+  <!-- Top HUD Bar: Title Badge, Live Status Pill, Cutaway Toggle, Audio Mute & 6 Camera Presets -->
+  <header class="fixed top-3 left-3 right-3 z-20 pointer-events-none flex flex-col xl:flex-row xl:items-center xl:justify-between gap-2.5">
+    <!-- Branding, Phase Pill & Quick Utility Controls -->
+    <div class="glass-panel pointer-events-auto rounded-2xl px-4 py-2.5 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-[#d42e12] to-[#8c1d0b] flex items-center justify-center border border-red-400/40 shadow-inner shrink-0">
+          <span class="text-xs font-extrabold tracking-tight text-white">M3</span>
+        </div>
+        <div class="min-w-0">
+          <h1 class="text-sm sm:text-base font-bold tracking-tight text-white truncate">
+            Module 3: In-Carriage Route Display &amp; 5-Screen Virtual Train Box
+          </h1>
+          <div class="flex items-center gap-2 text-[11px] text-slate-300 mt-0.5">
+            <span id="phase-dot" class="inline-block w-2 h-2 rounded-full bg-slate-400 shrink-0"></span>
+            <span id="phase-pill" class="font-semibold text-slate-200 truncate">Phase: Platform Idle (Ang Mo Kio NS16)</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-1.5 shrink-0">
+        <!-- Cutaway Shell Toggle -->
+        <button id="btn-cutaway-toggle" title="Toggle Translucent Cutaway Shell"
+          class="px-2.5 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 border border-slate-600/40 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer">
+          <span id="cutaway-dot" class="w-2 h-2 rounded-full bg-slate-500"></span>
+          <span class="hidden sm:inline">X-Ray</span>
+        </button>
+
+        <!-- Audio Mute/Unmute Toggle -->
+        <button id="btn-audio" title="Mute / Unmute Audio"
+          class="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-emerald-300 border border-slate-600/40 transition-colors cursor-pointer">
+          <svg id="icon-audio-on" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M11 5L6 9H2v6h4l5 4V5z" />
+            <path d="M15.54 8.46a5 5 0 010 7.07M19.07 4.93a10 10 0 010 14.14" stroke-linecap="round" />
+          </svg>
+          <svg id="icon-audio-off" class="w-4 h-4 hidden text-rose-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M11 5L6 9H2v6h4l5 4V5z" />
+            <path d="M23 9l-6 6M17 9l6 6" stroke-linecap="round" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- 6 Dual-Perspective Camera Preset Buttons -->
+    <nav class="glass-panel pointer-events-auto rounded-2xl p-1.5 flex items-center gap-1 overflow-x-auto no-scrollbar" aria-label="Camera Presets">
+      <button data-view="platform" class="cam-btn px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer bg-[#d42e12] text-white shadow-sm">
+        Platform Waiting View
+      </button>
+      <button data-view="inside" class="cam-btn px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer text-slate-200 hover:bg-slate-700/60">
+        Step Inside Carriage
+      </button>
+      <button data-view="seated" class="cam-btn px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer text-slate-200 hover:bg-slate-700/60">
+        Seated Passenger View
+      </button>
+      <button data-view="routeBar" class="cam-btn px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer text-slate-200 hover:bg-slate-700/60">
+        Overhead Route Bar Zoom
+      </button>
+      <button data-view="aerial" class="cam-btn px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer text-slate-200 hover:bg-slate-700/60">
+        Open-Top Aerial View
+      </button>
+      <button data-view="cutaway" class="cam-btn px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer text-slate-200 hover:bg-slate-700/60">
+        3D Technical Cutaway
+      </button>
+    </nav>
+  </header>
+
+  <!-- Floating Status / Announcement Toast -->
+  <div id="status-toast" class="fixed top-28 sm:top-24 left-1/2 -translate-x-1/2 z-30 glass-panel rounded-2xl px-4 py-2.5 text-xs sm:text-sm font-medium text-white flex items-center gap-2.5 transition-all duration-300 opacity-0 -translate-y-2 pointer-events-none border-emerald-400/40 max-w-[92vw]">
+    <span id="toast-dot" class="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0"></span>
+    <span id="toast-text" class="truncate">System Ready</span>
+  </div>
+
+  <!-- Bottom-Left Compact Architecture Spec Card (Desktop) -->
+  <div class="hidden md:flex fixed bottom-3 left-3 z-20 glass-panel rounded-2xl px-3.5 py-2.5 flex-col gap-1 text-[11px] text-slate-300">
+    <div class="font-bold text-white flex items-center gap-2">
+      <span class="w-2 h-2 rounded-full bg-red-500"></span>
+      <span>Open-Top Back-to-Back Vestibule Box</span>
+    </div>
+    <div>Dimensions: <strong class="text-slate-100">2.2m (W) &times; 1.0m (D) &times; 2.1m (H)</strong> &bull; No Roof / No Poles</div>
+    <div>Displays: <strong class="text-slate-100">5&times; 32&quot; Commercial TVs</strong> (Back-to-Back Columns + Transom)</div>
+    <div class="text-slate-400">Under-seat Multi-GPU PC &amp; 6-Way PDU &bull; Click doors to toggle</div>
+  </div>
+
+  <!-- Floating "Teacher Wireless Remote" Widget (Bottom-Right 2.4GHz RF Pocket Clicker) -->
+  <aside id="teacher-remote" class="fixed bottom-3 right-3 z-25 w-60 sm:w-64 rf-clicker rounded-3xl p-3.5">
+    <!-- Remote Header & Blinking Green TX LED -->
+    <div class="flex items-center justify-between pb-2 mb-2.5 border-b border-slate-700/70">
+      <div>
+        <div class="text-[9px] font-bold uppercase tracking-widest text-slate-400">2.4GHz RF Pocket Clicker</div>
+        <div class="text-xs font-bold text-white">Teacher Wireless Remote</div>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <span class="text-[9px] font-mono text-slate-400">TX</span>
+        <span id="rf-led" class="w-2.5 h-2.5 rounded-full bg-emerald-900 border border-emerald-400/40"></span>
+      </div>
+    </div>
+
+    <!-- 6 Numbered Tactile Journey Sequencer Buttons -->
+    <div class="flex flex-col gap-1.5">
+      <button id="btn-seq-1" data-seq="1"
+        class="rf-btn w-full px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-left flex items-center gap-2.5 cursor-pointer">
+        <span class="w-5 h-5 rounded-full bg-black/15 flex items-center justify-center text-[11px] font-extrabold shrink-0">1</span>
+        <span class="text-[11px] font-bold leading-tight">Train Arriving</span>
+      </button>
+
+      <button id="btn-seq-2" data-seq="2"
+        class="rf-btn w-full px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-left flex items-center gap-2.5 cursor-pointer">
+        <span class="w-5 h-5 rounded-full bg-black/20 flex items-center justify-center text-[11px] font-extrabold shrink-0">2</span>
+        <span class="text-[11px] font-bold leading-tight">Open Doors &amp; Board</span>
+      </button>
+
+      <button id="btn-seq-3" data-seq="3"
+        class="rf-btn w-full px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-left flex items-center gap-2.5 cursor-pointer">
+        <span class="w-5 h-5 rounded-full bg-black/20 flex items-center justify-center text-[11px] font-extrabold shrink-0">3</span>
+        <span class="text-[11px] font-bold leading-tight">Doors Closing Warning</span>
+      </button>
+
+      <button id="btn-seq-4" data-seq="4"
+        class="rf-btn w-full px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-left flex items-center gap-2.5 cursor-pointer">
+        <span class="w-5 h-5 rounded-full bg-black/20 flex items-center justify-center text-[11px] font-extrabold shrink-0">4</span>
+        <span class="text-[11px] font-bold leading-tight">Depart Station (In Motion)</span>
+      </button>
+
+      <button id="btn-seq-5" data-seq="5"
+        class="rf-btn w-full px-3 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-left flex items-center gap-2.5 cursor-pointer">
+        <span class="w-5 h-5 rounded-full bg-black/20 flex items-center justify-center text-[11px] font-extrabold shrink-0">5</span>
+        <span class="text-[11px] font-bold leading-tight">Arrive Next Station</span>
+      </button>
+
+      <button id="btn-seq-6" data-seq="6"
+        class="rf-btn w-full px-3 py-1.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-100 text-center text-[11px] font-bold mt-0.5 cursor-pointer">
+        6. Reset Simulation
+      </button>
+    </div>
+
+    <div class="mt-2.5 pt-2 border-t border-slate-800 flex items-center justify-between text-[9px] text-slate-500 font-mono">
+      <span>5&times; HDMI SYNC</span>
+      <span>STARiS 2.0</span>
+    </div>
+  </aside>
+
+  <!-- Modular 3D Application Script -->
+  <script>
+    (function () {
+      'use strict';
+
+      /* =========================================================================
+       * 1. DIMENSIONS, JOURNEY PHASES & 6 DUAL-PERSPECTIVE CAMERA PRESETS
+       * ========================================================================= */
+      const BOX = {
+        W: 2.20,          // Exact 2.20m Width (X: -1.10 .. +1.10)
+        D: 1.00,          // Exact 1.00m Depth (Z: -0.50 rear .. +0.50 front)
+        H: 2.10,          // Exact 2.10m Height (Y: 0.00 .. 2.10)
+        wallT: 0.06,      // Side & rear structural wall thickness
+        colD: 0.16,       // Hollow front column depth (Z: +0.34 .. +0.50) housing back-to-back TVs
+        doorW: 0.80,      // Exact 0.80m clear central doorway (X: -0.40 .. +0.40)
+        doorH: 1.72,      // Doorway opening height leaving 0.38m transom header for Screen 1
+        pillarW: 0.70     // Flanking hollow front columns (0.70m each)
+      };
+
+      const PHASE = {
+        IDLE: 'IDLE',
+        ARRIVING: 'ARRIVING',
+        BOARDING: 'BOARDING',
+        CLOSING: 'CLOSING',
+        IN_MOTION: 'IN_MOTION',
+        ARRIVED_NEXT: 'ARRIVED_NEXT'
+      };
+
+      const CAMERA_PRESETS = {
+        platform: {
+          pos: new THREE.Vector3(0.0, 1.34, 2.88),
+          target: new THREE.Vector3(0.0, 1.15, 0.35)
+        },
+        inside: {
+          // Moves inside the 0.8m doorway into the vestibule to inspect interior screens, seats & decals
+          pos: new THREE.Vector3(-0.36, 1.38, 0.24),
+          target: new THREE.Vector3(0.32, 1.02, -0.34)
+        },
+        seated: {
+          // Seated eye height (~1.10m) on rear seat bench (Z = -0.25) looking forward (+Z)
+          // directly at the sliding doors, overhead STARiS 2.0 transom bar, and interior Screens 4 & 5
+          pos: new THREE.Vector3(0.0, 1.10, -0.26),
+          target: new THREE.Vector3(0.0, 1.24, 0.42)
+        },
+        routeBar: {
+          pos: new THREE.Vector3(0.0, 1.91, 1.46),
+          target: new THREE.Vector3(0.0, 1.91, 0.48)
+        },
+        aerial: {
+          pos: new THREE.Vector3(2.25, 3.05, 2.25),
+          target: new THREE.Vector3(0.0, 0.82, 0.0)
+        },
+        cutaway: {
+          // Rear-right technical cutaway revealing under-seat PC/PDU + hollow front column VESA & HDMI routing
+          pos: new THREE.Vector3(2.15, 1.18, -1.65),
+          target: new THREE.Vector3(0.28, 0.76, -0.02)
+        }
+      };
+
+      /* =========================================================================
+       * 2. EMBEDDED WEB AUDIO API ENGINE (100% Native, Zero External Audio Files)
+       * ========================================================================= */
+      class TrainAudioEngine {
+        constructor() {
+          this.ctx = null;
+          this.muted = false;
+          this.activeNodes = [];
+        }
+
+        ensureContext() {
+          if (this.muted) return null;
+          try {
+            if (!this.ctx) {
+              const AudioCtx = window.AudioContext || window.webkitAudioContext;
+              if (!AudioCtx) return null;
+              this.ctx = new AudioCtx();
+            }
+            if (this.ctx.state === 'suspended') this.ctx.resume();
+            return this.ctx;
+          } catch (err) {
+            console.warn('Web Audio API unavailable:', err);
+            return null;
+          }
+        }
+
+        toggleMute() {
+          this.muted = !this.muted;
+          if (this.muted) this.stopContinuous();
+          return this.muted;
+        }
+
+        stopContinuous() {
+          this.activeNodes.forEach((n) => {
+            try { n.stop(); } catch (_) {}
+            try { n.disconnect(); } catch (_) {}
+          });
+          this.activeNodes = [];
+        }
+
+        playRemoteClick(pitch = 920) {
+          const ctx = this.ensureContext();
+          if (!ctx) return;
+          const now = ctx.currentTime;
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(pitch, now);
+          gain.gain.setValueAtTime(0.001, now);
+          gain.gain.linearRampToValueAtTime(0.09, now + 0.006);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.06);
+        }
+
+        /** Exterior Train Rumble + Metallic Brake Squeal */
+        playTrainArrivalBrake() {
+          const ctx = this.ensureContext();
+          if (!ctx) return;
+          this.stopContinuous();
+          const now = ctx.currentTime;
+          const dur = 3.2;
+
+          // Filtered brown noise rumble
+          const len = Math.floor(ctx.sampleRate * dur);
+          const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+          const data = buf.getChannelData(0);
+          let last = 0;
+          for (let i = 0; i < len; i++) {
+            const white = Math.random() * 2 - 1;
+            last = (last + 0.04 * white) / 1.04;
+            data[i] = last * 3.5;
+          }
+          const noise = ctx.createBufferSource();
+          noise.buffer = buf;
+
+          const lp = ctx.createBiquadFilter();
+          lp.type = 'lowpass';
+          lp.frequency.setValueAtTime(280, now);
+          lp.frequency.exponentialRampToValueAtTime(75, now + dur);
+
+          const rumbleGain = ctx.createGain();
+          rumbleGain.gain.setValueAtTime(0.01, now);
+          rumbleGain.gain.linearRampToValueAtTime(0.28, now + 0.45);
+          rumbleGain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+
+          noise.connect(lp);
+          lp.connect(rumbleGain);
+          rumbleGain.connect(ctx.destination);
+          noise.start(now);
+          noise.stop(now + dur);
+          this.activeNodes.push(noise);
+
+          // Metallic resonant brake squeal pitch drop
+          const sqStart = now + 1.45;
+          const sqDur = 1.6;
+          const osc = ctx.createOscillator();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(1680, sqStart);
+          osc.frequency.exponentialRampToValueAtTime(640, sqStart + sqDur);
+
+          const bp = ctx.createBiquadFilter();
+          bp.type = 'bandpass';
+          bp.frequency.setValueAtTime(1400, sqStart);
+          bp.frequency.exponentialRampToValueAtTime(680, sqStart + sqDur);
+          bp.Q.value = 14;
+
+          const sqGain = ctx.createGain();
+          sqGain.gain.setValueAtTime(0.001, sqStart);
+          sqGain.gain.linearRampToValueAtTime(0.045, sqStart + 0.25);
+          sqGain.gain.exponentialRampToValueAtTime(0.001, sqStart + sqDur);
+
+          osc.connect(bp);
+          bp.connect(sqGain);
+          sqGain.connect(ctx.destination);
+          osc.start(sqStart);
+          osc.stop(sqStart + sqDur);
+          this.activeNodes.push(osc);
+        }
+
+        /** VVVF Electric Traction Inverter Pitch Ramp */
+        playTractionMotor(isAccelerating = true) {
+          const ctx = this.ensureContext();
+          if (!ctx) return;
+          this.stopContinuous();
+          const now = ctx.currentTime;
+          const dur = isAccelerating ? 4.2 : 2.8;
+
+          [1, 1.5].forEach((mult, idx) => {
+            const osc = ctx.createOscillator();
+            osc.type = idx === 0 ? 'sine' : 'triangle';
+            if (isAccelerating) {
+              osc.frequency.setValueAtTime(130 * mult, now);
+              osc.frequency.exponentialRampToValueAtTime(520 * mult, now + dur * 0.72);
+              osc.frequency.linearRampToValueAtTime(480 * mult, now + dur);
+            } else {
+              osc.frequency.setValueAtTime(460 * mult, now);
+              osc.frequency.exponentialRampToValueAtTime(95 * mult, now + dur);
+            }
+
+            const gain = ctx.createGain();
+            gain.gain.setValueAtTime(0.001, now);
+            gain.gain.linearRampToValueAtTime(idx === 0 ? 0.08 : 0.03, now + 0.35);
+            gain.gain.setValueAtTime(idx === 0 ? 0.07 : 0.025, now + dur - 0.6);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now);
+            osc.stop(now + dur + 0.05);
+            this.activeNodes.push(osc);
+          });
+        }
+
+        /** Authentic Singapore MRT Door Closing Warning Chime (880Hz -> 660Hz repeating) */
+        playDoorClosingChime() {
+          const ctx = this.ensureContext();
+          if (!ctx) return;
+          const now = ctx.currentTime;
+
+          [0.0, 0.56, 1.12].forEach((offset) => {
+            const notes = [
+              { freq: 880, start: offset, dur: 0.21 },
+              { freq: 660, start: offset + 0.20, dur: 0.28 }
+            ];
+            notes.forEach(({ freq, start, dur }) => {
+              const osc = ctx.createOscillator();
+              const gain = ctx.createGain();
+              osc.type = 'triangle';
+              osc.frequency.setValueAtTime(freq, now + start);
+              gain.gain.setValueAtTime(0.001, now + start);
+              gain.gain.linearRampToValueAtTime(0.16, now + start + 0.015);
+              gain.gain.setValueAtTime(0.16, now + start + dur * 0.65);
+              gain.gain.exponentialRampToValueAtTime(0.001, now + start + dur);
+              osc.connect(gain);
+              gain.connect(ctx.destination);
+              osc.start(now + start);
+              osc.stop(now + start + dur + 0.02);
+            });
+          });
+        }
+
+        /** Crisp 3-Tone Station Arrival & Door Opening Chime (1046Hz -> 880Hz -> 659Hz) */
+        playArrivalChime(announceText = null) {
+          const ctx = this.ensureContext();
+          if (ctx) {
+            const now = ctx.currentTime;
+            const tones = [
+              { freq: 1046.5, start: 0.0, dur: 0.28 },
+              { freq: 880.0,  start: 0.22, dur: 0.28 },
+              { freq: 659.25, start: 0.44, dur: 0.48 }
+            ];
+            tones.forEach(({ freq, start, dur }) => {
+              const osc = ctx.createOscillator();
+              const gain = ctx.createGain();
+              osc.type = 'sine';
+              osc.frequency.setValueAtTime(freq, now + start);
+              gain.gain.setValueAtTime(0.001, now + start);
+              gain.gain.linearRampToValueAtTime(0.16, now + start + 0.015);
+              gain.gain.exponentialRampToValueAtTime(0.001, now + start + dur);
+              osc.connect(gain);
+              gain.connect(ctx.destination);
+              osc.start(now + start);
+              osc.stop(now + start + dur + 0.02);
+            });
+          }
+
+          if (!this.muted && announceText && 'speechSynthesis' in window) {
+            try {
+              window.speechSynthesis.cancel();
+              const utter = new SpeechSynthesisUtterance(announceText);
+              utter.rate = 0.96;
+              utter.pitch = 1.02;
+              utter.volume = 0.85;
+              setTimeout(() => {
+                if (!this.muted) window.speechSynthesis.speak(utter);
+              }, 700);
+            } catch (_) {}
+          }
+        }
+      }
+
+      /* =========================================================================
+       * 3. PROCEDURAL DECAL & DYNAMIC 5-SCREEN CANVAS ENGINE
+       * ========================================================================= */
+      const CanvasEngine = {
+        /* ---------------- Static Architectural & Interior Decal Textures ---------------- */
+
+        createClassroomFloorTexture() {
+          const c = document.createElement('canvas');
+          c.width = 1024; c.height = 1024;
+          const ctx = c.getContext('2d');
+          ctx.fillStyle = '#384352';
+          ctx.fillRect(0, 0, 1024, 1024);
+          ctx.strokeStyle = 'rgba(226, 232, 240, 0.12)';
+          ctx.lineWidth = 2;
+          for (let i = 0; i <= 1024; i += 128) {
+            ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 1024); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(1024, i); ctx.stroke();
+          }
+          const tex = new THREE.CanvasTexture(c);
+          tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+          tex.repeat.set(7, 7);
+          tex.anisotropy = 8;
+          return tex;
+        },
+
+        createCarriageFloorTexture() {
+          const c = document.createElement('canvas');
+          c.width = 512; c.height = 256;
+          const ctx = c.getContext('2d');
+          ctx.fillStyle = '#5a6370';
+          ctx.fillRect(0, 0, 512, 256);
+          for (let i = 0; i < 1800; i++) {
+            ctx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.16)' : 'rgba(15,23,42,0.22)';
+            ctx.fillRect(Math.random() * 512, Math.random() * 256, 2.5, 2.5);
+          }
+          ctx.strokeStyle = 'rgba(245, 158, 11, 0.65)';
+          ctx.lineWidth = 6;
+          ctx.beginPath();
+          ctx.arc(256, 256, 95, Math.PI, Math.PI * 2);
+          ctx.stroke();
+          const tex = new THREE.CanvasTexture(c);
+          tex.anisotropy = 4;
+          return tex;
+        },
+
+        createTactilePaverTexture() {
+          const c = document.createElement('canvas');
+          c.width = 512; c.height = 128;
+          const ctx = c.getContext('2d');
+          ctx.fillStyle = '#eab308';
+          ctx.fillRect(0, 0, 512, 128);
+          ctx.strokeStyle = 'rgba(133, 77, 14, 0.32)';
+          ctx.lineWidth = 3;
+          for (let x = 0; x <= 512; x += 128) {
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 128); ctx.stroke();
+          }
+          for (let x = 16; x < 512; x += 32) {
+            for (let y = 16; y < 128; y += 32) {
+              ctx.fillStyle = '#a16207';
+              ctx.beginPath(); ctx.arc(x + 2, y + 2, 7, 0, Math.PI * 2); ctx.fill();
+              ctx.fillStyle = '#fef08a';
+              ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.fill();
+            }
+          }
+          const tex = new THREE.CanvasTexture(c);
+          tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+          tex.repeat.set(5, 1);
+          tex.anisotropy = 8;
+          return tex;
+        },
+
+        /** Printed Linear Singapore MRT System Map Decal (above rear passenger seats) */
+        createSystemMapDecalTexture() {
+          const c = document.createElement('canvas');
+          c.width = 1200; c.height = 460;
+          const ctx = c.getContext('2d');
+
+          ctx.fillStyle = '#f8fafc';
+          ctx.fillRect(0, 0, 1200, 460);
+          ctx.strokeStyle = '#cbd5e1';
+          ctx.lineWidth = 8;
+          ctx.strokeRect(4, 4, 1192, 452);
+
+          // Header Bar
+          ctx.fillStyle = '#0f2942';
+          ctx.fillRect(14, 14, 1172, 62);
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '800 28px Inter, sans-serif';
+          ctx.fillText('SINGAPORE MRT SYSTEM MAP', 36, 54);
+          ctx.font = '600 18px Inter, sans-serif';
+          ctx.fillStyle = '#94a3b8';
+          ctx.textAlign = 'right';
+          ctx.fillText('NSL • EWL • CCL • DTL • NEL • TEL', 1160, 52);
+          ctx.textAlign = 'left';
+
+          // Stylized Color-Coded MRT Lines
+          const drawLine = (pts, color, width = 10) => {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = width;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.beginPath();
+            pts.forEach(([x, y], i) => (i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)));
+            ctx.stroke();
+          };
+
+          // EWL Green
+          drawLine([[90, 290], [320, 290], [600, 310], [880, 290], [1110, 250]], '#009645');
+          // NSL Red
+          drawLine([[180, 290], [220, 150], [560, 150], [620, 230], [620, 370]], '#d42e12');
+          // CCL Orange/Yellow Loop
+          drawLine([[360, 360], [380, 230], [560, 210], [760, 240], [740, 365], [560, 385]], '#fa9e0d');
+          // DTL Blue
+          drawLine([[260, 195], [450, 255], [660, 330], [930, 345], [1070, 295]], '#005ec4');
+          // NEL Purple
+          drawLine([[440, 395], [650, 295], [840, 195], [1020, 145]], '#9900aa');
+          // TEL Brown
+          drawLine([[390, 115], [520, 190], [550, 330], [820, 395], [1050, 365]], '#9d5b25');
+
+          // Key Interchange Nodes & Station Labels
+          const interchanges = [
+            { x: 180, y: 290, name: 'Jurong East' },
+            { x: 390, y: 150, name: 'Woodlands' },
+            { x: 560, y: 150, name: 'Ang Mo Kio' },
+            { x: 585, y: 210, name: 'Bishan' },
+            { x: 550, y: 270, name: 'Orchard' },
+            { x: 620, y: 310, name: 'City Hall' },
+            { x: 620, y: 365, name: 'Marina Bay' },
+            { x: 855, y: 292, name: 'Paya Lebar' },
+            { x: 1090, y: 254, name: 'Changi' }
+          ];
+          interchanges.forEach((n) => {
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath(); ctx.arc(n.x, n.y, 10, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#0f172a';
+            ctx.lineWidth = 4;
+            ctx.stroke();
+
+            ctx.fillStyle = '#0f172a';
+            ctx.font = '700 15px Inter, sans-serif';
+            ctx.fillText(n.name, n.x + 14, n.y + 5);
+          });
+
+          // Compact Line Legend
+          const legend = [
+            { code: 'NSL', col: '#d42e12' },
+            { code: 'EWL', col: '#009645' },
+            { code: 'CCL', col: '#fa9e0d' },
+            { code: 'DTL', col: '#005ec4' },
+            { code: 'NEL', col: '#9900aa' },
+            { code: 'TEL', col: '#9d5b25' }
+          ];
+          legend.forEach((l, i) => {
+            const lx = 34 + i * 112;
+            ctx.fillStyle = l.col;
+            ctx.beginPath(); ctx.roundRect(lx, 412, 94, 30, 6); ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '800 16px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(l.code, lx + 47, 433);
+          });
+          ctx.textAlign = 'left';
+
+          const tex = new THREE.CanvasTexture(c);
+          tex.anisotropy = 8;
+          return tex;
+        },
+
+        /** Reserved / Priority Seat Decal above Red End Seat */
+        createReservedSeatDecalTexture() {
+          const c = document.createElement('canvas');
+          c.width = 512; c.height = 384;
+          const ctx = c.getContext('2d');
+
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, 512, 384);
+          ctx.strokeStyle = '#dc2626';
+          ctx.lineWidth = 14;
+          ctx.strokeRect(7, 7, 498, 370);
+
+          // Red Header Band
+          ctx.fillStyle = '#dc2626';
+          ctx.fillRect(14, 14, 484, 88);
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '900 40px Inter, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('RESERVED SEAT', 256, 72);
+
+          // Subtitle
+          ctx.fillStyle = '#1e293b';
+          ctx.font = '800 24px Inter, sans-serif';
+          ctx.fillText('Show you care, offer this seat', 256, 142);
+
+          // 4 Clean Priority Pictogram Circles (Elderly, Pregnant, Parent+Child, Wheelchair)
+          const labels = ['Elderly', 'Expectant', 'With Child', 'Wheelchair'];
+          const symbols = ['🦯', '🤰', '👶', '♿'];
+          labels.forEach((lbl, i) => {
+            const cx = 82 + i * 116;
+            ctx.fillStyle = '#fee2e2';
+            ctx.beginPath(); ctx.arc(cx, 224, 42, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#dc2626';
+            ctx.lineWidth = 4;
+            ctx.stroke();
+
+            ctx.font = '38px Inter, sans-serif';
+            ctx.fillStyle = '#991b1b';
+            ctx.fillText(symbols[i], cx, 238);
+
+            ctx.font = '700 17px Inter, sans-serif';
+            ctx.fillStyle = '#334155';
+            ctx.fillText(lbl, cx, 294);
+          });
+
+          // Bottom Courtesy Strip
+          ctx.fillStyle = '#f1f5f9';
+          ctx.fillRect(24, 316, 464, 46);
+          ctx.fillStyle = '#dc2626';
+          ctx.font = '700 18px Inter, sans-serif';
+          ctx.fillText('Please give up this seat to those in need', 256, 346);
+
+          const tex = new THREE.CanvasTexture(c);
+          tex.anisotropy = 4;
+          return tex;
+        },
+
+        /** Door Safety Warning Sticker (Red Octagon "KEEP CLEAR OF DOORS / MIND THE GAP") */
+        createDoorWarningDecalTexture() {
+          const c = document.createElement('canvas');
+          c.width = 256; c.height = 384;
+          const ctx = c.getContext('2d');
+
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, 256, 384);
+          ctx.strokeStyle = '#dc2626';
+          ctx.lineWidth = 10;
+          ctx.strokeRect(5, 5, 246, 374);
+
+          // Red Octagon Stop Symbol
+          const cx = 128, cy = 112, r = 74;
+          ctx.fillStyle = '#dc2626';
+          ctx.beginPath();
+          for (let i = 0; i < 8; i++) {
+            const ang = (Math.PI / 8) + (i * Math.PI / 4);
+            const px = cx + Math.cos(ang) * r;
+            const py = cy + Math.sin(ang) * r;
+            i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+          }
+          ctx.closePath();
+          ctx.fill();
+
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '900 32px Inter, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('STOP', cx, cy + 11);
+
+          ctx.fillStyle = '#991b1b';
+          ctx.font = '900 26px Inter, sans-serif';
+          ctx.fillText('KEEP CLEAR', 128, 232);
+          ctx.fillText('OF DOORS', 128, 264);
+
+          ctx.fillStyle = '#f59e0b';
+          ctx.fillRect(20, 290, 216, 68);
+          ctx.fillStyle = '#0f172a';
+          ctx.font = '900 24px Inter, sans-serif';
+          ctx.fillText('MIND THE GAP', 128, 333);
+
+          const tex = new THREE.CanvasTexture(c);
+          tex.anisotropy = 4;
+          return tex;
+        },
+
+        /** Singapore Transit Courtesy Mascot Poster ("Stand-Up Stacey & Give-Way Glenda") */
+        createCourtesyPosterTexture() {
+          const c = document.createElement('canvas');
+          c.width = 420; c.height = 560;
+          const ctx = c.getContext('2d');
+
+          // Warm cheerful gradient backdrop
+          const grad = ctx.createLinearGradient(0, 0, 0, 560);
+          grad.addColorStop(0, '#fef3c7');
+          grad.addColorStop(1, '#dbeafe');
+          ctx.fillStyle = grad;
+          ctx.fillRect(0, 0, 420, 560);
+
+          // Header Ribbon
+          ctx.fillStyle = '#00897b';
+          ctx.fillRect(0, 0, 420, 96);
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '900 28px Inter, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('GRACIOUS COMMUTING', 210, 46);
+          ctx.font = '700 18px Inter, sans-serif';
+          ctx.fillStyle = '#ccfbf1';
+          ctx.fillText('Thoughtful Bunch Campaign', 210, 76);
+
+          // Stylized Cute Mascot 1: Stand-Up Stacey (Teal)
+          ctx.fillStyle = '#0d9488';
+          ctx.beginPath(); ctx.arc(125, 225, 52, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath(); ctx.arc(108, 216, 8, 0, Math.PI * 2); ctx.arc(142, 216, 8, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 5;
+          ctx.beginPath(); ctx.arc(125, 230, 18, 0.2, Math.PI - 0.2); ctx.stroke();
+          ctx.fillStyle = '#0f766e';
+          ctx.font = '800 18px Inter, sans-serif';
+          ctx.fillText('Stand-Up Stacey', 125, 304);
+
+          // Stylized Cute Mascot 2: Give-Way Glenda (Amber/Rose)
+          ctx.fillStyle = '#f59e0b';
+          ctx.beginPath(); ctx.arc(295, 225, 52, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath(); ctx.arc(278, 216, 8, 0, Math.PI * 2); ctx.arc(312, 216, 8, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 5;
+          ctx.beginPath(); ctx.arc(295, 230, 18, 0.2, Math.PI - 0.2); ctx.stroke();
+          ctx.fillStyle = '#b45309';
+          ctx.font = '800 18px Inter, sans-serif';
+          ctx.fillText('Give-Way Glenda', 295, 304);
+
+          // Campaign Slogan Box
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath(); ctx.roundRect(26, 344, 368, 176, 20); ctx.fill();
+          ctx.strokeStyle = '#00897b';
+          ctx.lineWidth = 4;
+          ctx.stroke();
+
+          ctx.fillStyle = '#0f172a';
+          ctx.font = '900 30px Inter, sans-serif';
+          ctx.fillText('Move In, Give Way,', 210, 405);
+          ctx.fillStyle = '#00897b';
+          ctx.fillText("Make Someone's Day!", 210, 448);
+
+          ctx.fillStyle = '#64748b';
+          ctx.font = '600 16px Inter, sans-serif';
+          ctx.fillText('Let passengers alight before boarding', 210, 492);
+
+          const tex = new THREE.CanvasTexture(c);
+          tex.anisotropy = 4;
+          return tex;
+        },
+
+        /** Emergency Intercom & Door Release Mock Faceplate Texture */
+        createEmergencyIntercomTexture() {
+          const c = document.createElement('canvas');
+          c.width = 320; c.height = 512;
+          const ctx = c.getContext('2d');
+
+          // Brushed metallic faceplate
+          ctx.fillStyle = '#cbd5e1';
+          ctx.fillRect(0, 0, 320, 512);
+          ctx.strokeStyle = '#475569';
+          ctx.lineWidth = 10;
+          ctx.strokeRect(5, 5, 310, 502);
+
+          // Top Red Header
+          ctx.fillStyle = '#dc2626';
+          ctx.fillRect(16, 16, 288, 68);
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '900 22px Inter, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('EMERGENCY INTERCOM', 160, 58);
+
+          // Perforated Speaker Grille
+          ctx.fillStyle = '#1e293b';
+          for (let row = 0; row < 5; row++) {
+            for (let col = 0; col < 10; col++) {
+              ctx.beginPath();
+              ctx.arc(52 + col * 24, 114 + row * 16, 4.5, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
+
+          // Red "PRESS TO SPEAK" Button + Green Status LED
+          ctx.fillStyle = '#10b981';
+          ctx.beginPath(); ctx.arc(255, 224, 10, 0, Math.PI * 2); ctx.fill();
+
+          ctx.fillStyle = '#b91c1c';
+          ctx.beginPath(); ctx.arc(160, 240, 44, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#ef4444';
+          ctx.beginPath(); ctx.arc(160, 240, 34, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '800 13px Inter, sans-serif';
+          ctx.fillText('PRESS TO', 160, 236);
+          ctx.fillText('SPEAK', 160, 253);
+
+          // Yellow-Black Hazard Striped Emergency Door Release Housing
+          ctx.fillStyle = '#eab308';
+          ctx.fillRect(24, 318, 272, 168);
+          ctx.strokeStyle = '#0f172a';
+          ctx.lineWidth = 5;
+          ctx.strokeRect(24, 318, 272, 168);
+
+          ctx.fillStyle = '#0f172a';
+          ctx.font = '900 20px Inter, sans-serif';
+          ctx.fillText('EMERGENCY DOOR', 160, 354);
+          ctx.fillText('RELEASE', 160, 378);
+
+          // Mock Red Pull Handle Recess
+          ctx.fillStyle = '#1e293b';
+          ctx.beginPath(); ctx.roundRect(66, 396, 188, 68, 12); ctx.fill();
+          ctx.fillStyle = '#dc2626';
+          ctx.beginPath(); ctx.roundRect(88, 412, 144, 34, 8); ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '800 16px Inter, sans-serif';
+          ctx.fillText('PULL IN EMERGENCY', 160, 435);
+
+          const tex = new THREE.CanvasTexture(c);
+          tex.anisotropy = 4;
+          return tex;
+        },
+
+        createScreenObj(width, height) {
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const texture = new THREE.CanvasTexture(canvas);
+          texture.anisotropy = 8;
+          return { canvas, ctx: canvas.getContext('2d'), texture };
+        },
+
+        /* ---------------------------------------------------------------------
+         * SCREEN 1: Overhead 32" STARiS 2.0 Dynamic Route Map (1280 x 512)
+         * Double-sided transom display readable from Platform & Seated Views!
+         * --------------------------------------------------------------------- */
+        renderStarisScreen(obj, sim, timeSec) {
+          const { ctx, texture } = obj;
+          const W = 1280;
+          const H = 512;
+          const flashFast = Math.sin(timeSec * 11) > 0;
+          const flashMed = Math.sin(timeSec * 5.5) > 0;
+
+          ctx.fillStyle = '#09111f';
+          ctx.fillRect(0, 0, W, H);
+
+          // Top Status Band
+          let headerBg = '#121e33';
+          let headerText = 'NORTH-SOUTH LINE  •  TOWARDS JURONG EAST';
+          let headerColor = '#f8fafc';
+
+          if (sim.phase === PHASE.ARRIVING) {
+            headerBg = flashFast ? '#f59e0b' : '#b45309';
+            headerText = '⚠  TRAIN ARRIVING — STAND BEHIND YELLOW LINE';
+            headerColor = '#0f172a';
+          } else if (sim.phase === PHASE.BOARDING) {
+            headerBg = '#065f46';
+            headerText = 'ANG MO KIO (NS16)  —  BOARDING IN PROGRESS';
+            headerColor = '#ecfdf5';
+          } else if (sim.phase === PHASE.CLOSING) {
+            headerBg = flashFast ? '#dc2626' : '#7f1d1d';
+            headerText = '⚠  DOORS CLOSING — PLEASE STAND CLEAR';
+            headerColor = '#ffffff';
+          } else if (sim.phase === PHASE.IN_MOTION) {
+            headerBg = '#0f2942';
+            headerText = 'NEXT STATION: YIO CHU KANG (NS15)  •  IN TRANSIT';
+            headerColor = '#38bdf8';
+          } else if (sim.phase === PHASE.ARRIVED_NEXT) {
+            headerBg = '#059669';
+            headerText = 'YIO CHU KANG (NS15)  —  PLEASE ALIGHT';
+            headerColor = '#ffffff';
+          }
+
+          ctx.fillStyle = headerBg;
+          ctx.fillRect(0, 0, W, 102);
+
+          // NSL Red Line Badge
+          ctx.fillStyle = '#d42e12';
+          ctx.beginPath(); ctx.roundRect(26, 20, 118, 62, 12); ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '900 34px Inter, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('NSL', 85, 63);
+
+          ctx.textAlign = 'left';
+          ctx.fillStyle = headerColor;
+          ctx.font = '900 36px Inter, sans-serif';
+          ctx.fillText(headerText, 170, 64);
+
+          // Route Schematic: NS16 Ang Mo Kio -> NS15 Yio Chu Kang -> NS14 Khatib -> NS13 Yishun
+          const stations = [
+            { code: 'NS16', name: 'Ang Mo Kio', x: 185 },
+            { code: 'NS15', name: 'Yio Chu Kang', x: 490 },
+            { code: 'NS14', name: 'Khatib', x: 795 },
+            { code: 'NS13', name: 'Yishun', x: 1100 }
+          ];
+          const lineY = 248;
+
+          ctx.lineCap = 'round';
+          ctx.strokeStyle = '#334155';
+          ctx.lineWidth = 20;
+          ctx.beginPath(); ctx.moveTo(105, lineY); ctx.lineTo(1185, lineY); ctx.stroke();
+
+          const activeStartX = (sim.phase === PHASE.IN_MOTION || sim.phase === PHASE.ARRIVED_NEXT)
+            ? stations[1].x : stations[0].x;
+          ctx.strokeStyle = '#d42e12';
+          ctx.lineWidth = 20;
+          ctx.beginPath(); ctx.moveTo(activeStartX, lineY); ctx.lineTo(1185, lineY); ctx.stroke();
+
+          if (sim.phase === PHASE.IN_MOTION) {
+            ctx.save();
+            ctx.strokeStyle = '#10b981';
+            ctx.lineWidth = 20;
+            ctx.beginPath(); ctx.moveTo(stations[0].x, lineY); ctx.lineTo(stations[1].x, lineY); ctx.stroke();
+            ctx.strokeStyle = '#ecfdf5';
+            ctx.lineWidth = 9;
+            ctx.setLineDash([22, 28]);
+            ctx.lineDashOffset = -(timeSec * 145);
+            ctx.stroke();
+            ctx.restore();
+          }
+
+          stations.forEach((st, idx) => {
+            const isPassed = idx === 0 && (sim.phase === PHASE.IN_MOTION || sim.phase === PHASE.ARRIVED_NEXT);
+            const isCurrent =
+              (idx === 0 && sim.phase !== PHASE.IN_MOTION && sim.phase !== PHASE.ARRIVED_NEXT) ||
+              (idx === 1 && sim.phase === PHASE.ARRIVED_NEXT);
+            const isNextDest = idx === 1 && sim.phase === PHASE.IN_MOTION;
+
+            if (isCurrent || isNextDest) {
+              const haloCol = sim.phase === PHASE.ARRIVED_NEXT
+                ? 'rgba(16, 185, 129, 0.4)'
+                : (isNextDest ? 'rgba(56, 189, 248, 0.35)' : 'rgba(245, 158, 11, 0.35)');
+              ctx.fillStyle = haloCol;
+              ctx.beginPath(); ctx.arc(st.x, lineY, 38 + Math.sin(timeSec * 6) * 7, 0, Math.PI * 2); ctx.fill();
+            }
+
+            ctx.fillStyle = isPassed
+              ? '#475569'
+              : (isCurrent ? (sim.phase === PHASE.ARRIVED_NEXT ? '#10b981' : '#f59e0b') : '#ffffff');
+            ctx.beginPath(); ctx.arc(st.x, lineY, isCurrent ? 24 : 19, 0, Math.PI * 2); ctx.fill();
+            ctx.lineWidth = 6;
+            ctx.strokeStyle = isPassed ? '#1e293b' : (isCurrent ? '#ffffff' : '#d42e12');
+            ctx.stroke();
+
+            // Station Code Badge
+            ctx.fillStyle = isPassed ? '#334155' : (isCurrent ? '#10b981' : '#d42e12');
+            ctx.beginPath(); ctx.roundRect(st.x - 48, lineY - 82, 96, 36, 9); ctx.fill();
+            ctx.fillStyle = isPassed ? '#94a3b8' : '#ffffff';
+            ctx.font = '800 22px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(st.code, st.x, lineY - 56);
+
+            // Station Name
+            ctx.fillStyle = isPassed ? '#64748b' : (isCurrent || isNextDest ? '#ffffff' : '#cbd5e1');
+            ctx.font = (isCurrent || isNextDest) ? '900 32px Inter, sans-serif' : '700 26px Inter, sans-serif';
+            ctx.fillText(st.name, st.x, lineY + 62);
+
+            if (isPassed) {
+              ctx.fillStyle = '#64748b';
+              ctx.font = '700 18px Inter, sans-serif';
+              ctx.fillText('PASSED', st.x, lineY + 90);
+            } else if (isCurrent) {
+              ctx.fillStyle = sim.phase === PHASE.ARRIVED_NEXT ? '#34d399' : '#fbbf24';
+              ctx.font = '800 18px Inter, sans-serif';
+              ctx.fillText('● CURRENT', st.x, lineY + 90);
+            } else if (isNextDest) {
+              ctx.fillStyle = '#38bdf8';
+              ctx.font = '800 18px Inter, sans-serif';
+              ctx.fillText('▶ NEXT STOP', st.x, lineY + 90);
+            }
+          });
+
+          // Bottom Directional / Warning Banner
+          const botY = 384;
+          if (sim.phase === PHASE.CLOSING) {
+            ctx.fillStyle = flashFast ? '#dc2626' : '#991b1b';
+            ctx.fillRect(0, botY, W, H - botY);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '900 46px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('⚠  DOORS CLOSING — PLEASE STAND CLEAR  ⚠', W / 2, botY + 80);
+          } else if (sim.phase === PHASE.BOARDING || sim.phase === PHASE.ARRIVED_NEXT) {
+            ctx.fillStyle = flashMed ? '#059669' : '#047857';
+            ctx.fillRect(0, botY, W, H - botY);
+            const cL = flashMed ? '◀ ◀ ◀' : '  ◀ ◀';
+            const cR = flashMed ? '▶ ▶ ▶' : '▶ ▶  ';
+            ctx.fillStyle = '#ecfdf5';
+            ctx.font = '900 44px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            const label = sim.phase === PHASE.ARRIVED_NEXT
+              ? 'YIO CHU KANG — DOORS OPEN THIS SIDE'
+              : 'DOORS OPEN THIS SIDE';
+            ctx.fillText(`${cL}   ${label}   ${cR}`, W / 2, botY + 80);
+          } else if (sim.phase === PHASE.ARRIVING) {
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(0, botY, W, H - botY);
+            ctx.fillStyle = '#fbbf24';
+            ctx.font = '800 38px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('Train approaching — Please stand behind yellow safety line', W / 2, botY + 78);
+          } else {
+            ctx.fillStyle = '#101a2c';
+            ctx.fillRect(0, botY, W, H - botY);
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '700 32px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('STARiS 2.0 Dynamic Route Display  •  North-South Line', W / 2, botY + 76);
+          }
+
+          texture.needsUpdate = true;
+        },
+
+        /* ---------------------------------------------------------------------
+         * SCREENS 2 & 3: Outside Platform Windows (1024 x 576 each)
+         * --------------------------------------------------------------------- */
+        renderOutsideWindow(obj, side, sim) {
+          const { ctx, texture } = obj;
+          const W = 1024, H = 576;
+          const viewportOffsetX = side === 'left' ? 0 : 2160;
+
+          // Track pit & tunnel background
+          const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
+          bgGrad.addColorStop(0, '#0c121e');
+          bgGrad.addColorStop(0.55, '#182234');
+          bgGrad.addColorStop(1, '#090d14');
+          ctx.fillStyle = bgGrad;
+          ctx.fillRect(0, 0, W, H);
+
+          // Concrete wall joints & horizontal cables
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.14)';
+          ctx.lineWidth = 3;
+          for (let x = 0; x < W; x += 128) {
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 420); ctx.stroke();
+          }
+          ctx.strokeStyle = '#334155';
+          ctx.lineWidth = 6;
+          [165, 195, 225].forEach((cy) => {
+            ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(W, cy); ctx.stroke();
+          });
+
+          // Track sleepers, steel rails & yellow third rail
+          ctx.fillStyle = '#111827';
+          ctx.fillRect(0, 420, W, H - 420);
+          ctx.fillStyle = '#64748b';
+          ctx.fillRect(0, 462, W, 10);
+          ctx.fillRect(0, 514, W, 12);
+          ctx.fillStyle = '#ca8a04';
+          ctx.fillRect(0, 434, W, 8);
+
+          // Distant Signal Light
+          const sigGreen = sim.phase === PHASE.ARRIVING || sim.phase === PHASE.IN_MOTION;
+          const sigX = side === 'left' ? 160 : 840;
+          ctx.fillStyle = '#0f172a';
+          ctx.fillRect(sigX - 24, 100, 48, 108);
+          ctx.fillStyle = sigGreen ? '#10b981' : '#ef4444';
+          ctx.beginPath(); ctx.arc(sigX, sigGreen ? 176 : 132, 14, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = sigGreen ? 'rgba(16,185,129,0.28)' : 'rgba(239,68,68,0.28)';
+          ctx.beginPath(); ctx.arc(sigX, sigGreen ? 176 : 132, 28, 0, Math.PI * 2); ctx.fill();
+
+          // Exterior SMRT Train Body
+          if (Math.abs(sim.outsideTrainX) < 3800) {
+            ctx.save();
+            ctx.translate(-viewportOffsetX + sim.outsideTrainX, 0);
+
+            const trainLeft = -360, trainW = 3900, bodyTop = 44, bodyH = 440;
+            const bodyGrad = ctx.createLinearGradient(0, bodyTop, 0, bodyTop + bodyH);
+            bodyGrad.addColorStop(0, '#f1f5f9');
+            bodyGrad.addColorStop(0.55, '#e2e8f0');
+            bodyGrad.addColorStop(1, '#cbd5e1');
+            ctx.fillStyle = bodyGrad;
+            ctx.fillRect(trainLeft, bodyTop, trainW, bodyH);
+
+            // Black Window Band + Red SMRT Waistband + Black Accent
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(trainLeft, bodyTop + 76, trainW, 178);
+            ctx.fillStyle = '#d42e12';
+            ctx.fillRect(trainLeft, bodyTop + 266, trainW, 44);
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(trainLeft, bodyTop + 314, trainW, 12);
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(trainLeft, bodyTop + bodyH, trainW, 74);
+
+            // Tinted Windows
+            [80, 480, 2240, 2640, 3040].forEach((wx) => {
+              ctx.fillStyle = '#1e293b';
+              ctx.beginPath(); ctx.roundRect(wx, bodyTop + 92, 330, 146, 16); ctx.fill();
+              const g = ctx.createLinearGradient(wx, bodyTop + 92, wx + 330, bodyTop + 238);
+              g.addColorStop(0, '#334155'); g.addColorStop(1, '#0f172a');
+              ctx.fillStyle = g;
+              ctx.beginPath(); ctx.roundRect(wx + 8, bodyTop + 100, 314, 130, 12); ctx.fill();
+              ctx.fillStyle = 'rgba(255,255,255,0.08)';
+              ctx.beginPath();
+              ctx.moveTo(wx + 40, bodyTop + 100); ctx.lineTo(wx + 115, bodyTop + 100);
+              ctx.lineTo(wx + 65, bodyTop + 230); ctx.lineTo(wx + 10, bodyTop + 230);
+              ctx.closePath(); ctx.fill();
+            });
+
+            // Destination LED & Car Number
+            ctx.fillStyle = '#020617';
+            ctx.fillRect(2280, bodyTop + 22, 340, 42);
+            ctx.fillStyle = '#f59e0b';
+            ctx.font = '800 24px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('NS1 JURONG EAST', 2450, bodyTop + 51);
+
+            ctx.fillStyle = '#0f172a';
+            ctx.font = '800 26px Inter, sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText('SMRT  •  C151C  •  CAR 3', 96, bodyTop + 372);
+
+            // Synchronized Exterior Sliding Door Edges
+            const slide = sim.doorOpenAmount * 220;
+            ctx.fillStyle = '#cbd5e1';
+            ctx.fillRect(910 - slide, bodyTop + 22, 130, bodyH - 22);
+            ctx.fillStyle = '#f59e0b';
+            ctx.fillRect(1022 - slide, bodyTop + 22, 16, bodyH - 22);
+
+            ctx.fillStyle = '#cbd5e1';
+            ctx.fillRect(2145 + slide, bodyTop + 22, 130, bodyH - 22);
+            ctx.fillStyle = '#f59e0b';
+            ctx.fillRect(2145 + slide, bodyTop + 22, 16, bodyH - 22);
+
+            ctx.restore();
+          }
+
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
+          ctx.lineWidth = 8;
+          ctx.strokeRect(4, 4, W - 8, H - 8);
+          texture.needsUpdate = true;
+        },
+
+        /* ---------------------------------------------------------------------
+         * SCREENS 4 & 5: Inside Carriage Back-to-Back Windows (1024 x 576 each)
+         * side = 'left' (viewer's left inside box) | 'right' (viewer's right)
+         * --------------------------------------------------------------------- */
+        renderInsideWindow(obj, side, sim) {
+          const { ctx, texture } = obj;
+          const W = 1024, H = 576;
+          // Continuous dual-window panoramic offset with door gap in between
+          const viewX = side === 'left' ? 0 : 1260;
+          const d = sim.journeyDist;
+
+          const drawStationPlatform = (offsetX, code, name) => {
+            ctx.save();
+            const bg = ctx.createLinearGradient(0, 0, 0, H);
+            bg.addColorStop(0, '#cbd5e1'); bg.addColorStop(0.55, '#e2e8f0'); bg.addColorStop(1, '#94a3b8');
+            ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+
+            ctx.fillStyle = '#334155'; ctx.fillRect(0, 0, W, 68);
+            ctx.fillStyle = '#475569'; ctx.fillRect(0, 68, W, 14);
+            ctx.fillStyle = '#94a3b8'; ctx.fillRect(0, 430, W, 146);
+            ctx.fillStyle = '#eab308'; ctx.fillRect(0, 454, W, 24);
+            ctx.fillStyle = '#1e293b'; ctx.fillRect(0, 478, W, 6);
+
+            const spacing = 540;
+            const startIdx = Math.floor((offsetX - 600) / spacing);
+            for (let i = startIdx; i <= startIdx + 5; i++) {
+              const px = i * spacing - offsetX;
+              ctx.fillStyle = '#64748b'; ctx.fillRect(px, 78, 86, 355);
+              ctx.fillStyle = '#94a3b8'; ctx.fillRect(px + 10, 78, 22, 355);
+
+              ctx.fillStyle = '#0f172a';
+              ctx.beginPath(); ctx.roundRect(px + 130, 145, 340, 96, 12); ctx.fill();
+              ctx.fillStyle = '#d42e12'; ctx.fillRect(px + 130, 145, 340, 22);
+
+              ctx.fillStyle = '#ffffff';
+              ctx.font = '900 28px Inter, sans-serif';
+              ctx.textAlign = 'center';
+              ctx.fillText(`${code}  ${name}`, px + 300, 212);
+
+              ctx.fillStyle = '#f8fafc'; ctx.fillRect(px + 175, 275, 250, 125);
+              ctx.strokeStyle = '#334155'; ctx.lineWidth = 6; ctx.strokeRect(px + 175, 275, 250, 125);
+              ctx.fillStyle = '#00897b'; ctx.fillRect(px + 190, 290, 220, 28);
+              ctx.fillStyle = '#ffffff'; ctx.font = '700 16px Inter, sans-serif';
+              ctx.fillText('SimplyGo MRT Network', px + 300, 310);
+              ctx.fillStyle = '#64748b'; ctx.font = '600 15px Inter, sans-serif';
+              ctx.fillText('Stand Behind Yellow Line', px + 300, 362);
+            }
+            ctx.restore();
+          };
+
+          const drawTunnel = (offsetX) => {
+            ctx.fillStyle = '#070b12';
+            ctx.fillRect(0, 0, W, H);
+
+            const ribSpacing = 180;
+            const shift = ((offsetX % ribSpacing) + ribSpacing) % ribSpacing;
+            for (let x = -shift; x < W + ribSpacing; x += ribSpacing) {
+              ctx.fillStyle = '#18202c'; ctx.fillRect(x, 0, 32, H);
+              ctx.fillStyle = '#243042'; ctx.fillRect(x + 32, 0, 8, H);
+            }
+
+            const vig = ctx.createLinearGradient(0, 0, 0, H);
+            vig.addColorStop(0, 'rgba(0,0,0,0.85)');
+            vig.addColorStop(0.28, 'rgba(30,41,59,0.2)');
+            vig.addColorStop(0.72, 'rgba(30,41,59,0.2)');
+            vig.addColorStop(1, 'rgba(0,0,0,0.9)');
+            ctx.fillStyle = vig; ctx.fillRect(0, 0, W, H);
+
+            ctx.strokeStyle = '#334155'; ctx.lineWidth = 9;
+            [180, 220, 360, 395].forEach((cy) => {
+              ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(W, cy); ctx.stroke();
+            });
+
+            const lampSpacing = 620;
+            const lampShift = ((offsetX % lampSpacing) + lampSpacing) % lampSpacing;
+            for (let lx = -lampShift; lx < W + lampSpacing; lx += lampSpacing) {
+              ctx.fillStyle = '#fbbf24'; ctx.fillRect(lx, 118, 46, 12);
+              ctx.fillStyle = 'rgba(251, 191, 36, 0.22)';
+              ctx.beginPath(); ctx.arc(lx + 23, 124, 58, 0, Math.PI * 2); ctx.fill();
+            }
+          };
+
+          const drawOutdoorElevated = (offsetX) => {
+            const sky = ctx.createLinearGradient(0, 0, 0, H);
+            sky.addColorStop(0, '#38bdf8'); sky.addColorStop(0.58, '#bae6fd'); sky.addColorStop(1, '#e0f2fe');
+            ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+
+            // Drifting clouds
+            const cloudShift = (offsetX * 0.08) % 900;
+            ctx.fillStyle = 'rgba(255,255,255,0.85)';
+            for (let cx = -cloudShift; cx < W + 900; cx += 450) {
+              ctx.beginPath();
+              ctx.arc(cx + 120, 110, 42, 0, Math.PI * 2);
+              ctx.arc(cx + 165, 102, 54, 0, Math.PI * 2);
+              ctx.arc(cx + 215, 114, 38, 0, Math.PI * 2);
+              ctx.fill();
+            }
+
+            // Iconic Pastel Singapore HDB Residential Blocks
+            const hdbSpacing = 440;
+            const hdbOffset = offsetX * 0.28;
+            const startB = Math.floor((hdbOffset - 500) / hdbSpacing);
+            const hdbCols = ['#f1f5f9', '#fed7aa', '#e2e8f0', '#fecaca', '#fef3c7'];
+            const accCols = ['#0284c7', '#ea580c', '#059669', '#dc2626', '#d97706'];
+
+            for (let i = startB; i <= startB + 5; i++) {
+              const bx = i * hdbSpacing - hdbOffset;
+              const idx = ((i % hdbCols.length) + hdbCols.length) % hdbCols.length;
+              const bh = 220 + ((i * 73) % 95);
+              const by = 455 - bh;
+              ctx.fillStyle = hdbCols[idx]; ctx.fillRect(bx, by, 285, bh);
+              ctx.fillStyle = accCols[idx]; ctx.fillRect(bx, by, 285, 22); ctx.fillRect(bx + 125, by, 34, bh);
+              ctx.fillStyle = '#475569';
+              for (let wy = by + 38; wy < 430; wy += 32) {
+                for (let wx = bx + 18; wx < bx + 265; wx += 40) {
+                  if (wx > bx + 112 && wx < bx + 162) continue;
+                  ctx.fillRect(wx, wy, 24, 16);
+                }
+              }
+            }
+
+            // Tropical Rain Trees
+            const treeSpacing = 220;
+            const treeOffset = offsetX * 0.62;
+            const startT = Math.floor((treeOffset - 300) / treeSpacing);
+            for (let i = startT; i <= startT + 8; i++) {
+              const tx = i * treeSpacing - treeOffset;
+              ctx.fillStyle = '#15803d'; ctx.beginPath(); ctx.arc(tx, 445, 76, 0, Math.PI * 2); ctx.fill();
+              ctx.fillStyle = '#22c55e'; ctx.beginPath(); ctx.arc(tx + 34, 435, 58, 0, Math.PI * 2); ctx.fill();
+            }
+
+            // Elevated Viaduct Parapet & Catenary Poles
+            ctx.fillStyle = '#94a3b8'; ctx.fillRect(0, 472, W, 104);
+            ctx.fillStyle = '#64748b'; ctx.fillRect(0, 472, W, 16);
+
+            const poleSpacing = 520;
+            const poleShift = ((offsetX * 1.15) % poleSpacing + poleSpacing) % poleSpacing;
+            for (let px = -poleShift; px < W + poleSpacing; px += poleSpacing) {
+              ctx.fillStyle = '#334155'; ctx.fillRect(px, 0, 22, 478);
+            }
+          };
+
+          const worldScroll = d + viewX;
+
+          if (d < 1800) {
+            drawStationPlatform(worldScroll, 'NS16', 'Ang Mo Kio');
+            if (d > 1150) {
+              const alpha = Math.min(1, (d - 1150) / 650);
+              ctx.fillStyle = `rgba(7, 11, 18, ${alpha})`;
+              ctx.fillRect(0, 0, W, H);
+            }
+          } else if (d < 5250) {
+            drawTunnel(worldScroll);
+            if (d > 4800) {
+              const glow = (d - 4800) / 450;
+              ctx.fillStyle = `rgba(255, 255, 255, ${glow * 0.85})`;
+              ctx.fillRect(0, 0, W, H);
+            }
+          } else if (d < 10600) {
+            drawOutdoorElevated(worldScroll);
+            if (d < 5750) {
+              const bloom = 1 - (d - 5250) / 500;
+              ctx.fillStyle = `rgba(255, 255, 255, ${Math.max(0, bloom * 0.9)})`;
+              ctx.fillRect(0, 0, W, H);
+            }
+          } else {
+            const platformLocal = (d - 12400) + viewX;
+            drawStationPlatform(platformLocal, 'NS15', 'Yio Chu Kang');
+          }
+
+          ctx.strokeStyle = '#1e293b';
+          ctx.lineWidth = 14;
+          ctx.strokeRect(7, 7, W - 14, H - 14);
+          texture.needsUpdate = true;
+        }
+      };
+
+      /* =========================================================================
+       * 4. 3D OPEN-TOP BACK-TO-BACK CARRIAGE BOX & INTERIOR BUILDER
+       * ========================================================================= */
+      class VirtualTrainBoxBuilder {
+        constructor(scene) {
+          this.scene = scene;
+          this.interactables = [];
+          this.cutawayMats = []; // Outer carpentry materials that fade translucent in Cutaway mode
+          this.refs = {};
+        }
+
+        registerInteractable(obj, actionId, tooltip) {
+          obj.traverse((c) => {
+            if (c.isMesh) {
+              c.userData.actionId = actionId;
+              c.userData.tooltip = tooltip;
+              this.interactables.push(c);
+            }
+          });
+        }
+
+        makeCutawayMaterial(hex, roughness = 0.45, metalness = 0.2) {
+          const mat = new THREE.MeshStandardMaterial({
+            color: hex,
+            roughness,
+            metalness,
+            transparent: true,
+            opacity: 1.0
+          });
+          this.cutawayMats.push(mat);
+          return mat;
+        }
+
+        buildAll() {
+          this.buildLighting();
+          this.buildClassroomEnvironment();
+          this.buildOpenTopCarriageShell();
+          this.buildBackToBackScreensAndTransom();
+          this.buildInteriorSeatingAndDecals();
+          this.buildUnderSeatAndColumnTechHardware();
+        }
+
+        buildLighting() {
+          const hemi = new THREE.HemisphereLight(0xf8fafc, 0x334155, 0.82);
+          hemi.position.set(0, 7, 0);
+          this.scene.add(hemi);
+
+          const ambient = new THREE.AmbientLight(0xe2e8f0, 0.30);
+          this.scene.add(ambient);
+
+          const keyLight = new THREE.DirectionalLight(0xffffff, 0.90);
+          keyLight.position.set(2.8, 5.8, 3.6);
+          keyLight.castShadow = true;
+          keyLight.shadow.mapSize.width = 2048;
+          keyLight.shadow.mapSize.height = 2048;
+          keyLight.shadow.camera.near = 0.5;
+          keyLight.shadow.camera.far = 18;
+          keyLight.shadow.camera.left = -4;
+          keyLight.shadow.camera.right = 4;
+          keyLight.shadow.camera.top = 4;
+          keyLight.shadow.camera.bottom = -4;
+          keyLight.shadow.bias = -0.0004;
+          this.scene.add(keyLight);
+
+          // Rear/Side technical cutaway fill light
+          const techFill = new THREE.DirectionalLight(0xbae6fd, 0.58);
+          techFill.position.set(3.8, 2.2, -3.2);
+          this.scene.add(techFill);
+
+          // Bright open-top classroom overhead fill shining straight down into the vestibule
+          const topFill = new THREE.PointLight(0xffffff, 0.52, 4.0);
+          topFill.position.set(0, 2.55, 0);
+          this.scene.add(topFill);
+        }
+
+        buildClassroomEnvironment() {
+          // Light-slate tiled classroom floor
+          const floor = new THREE.Mesh(
+            new THREE.PlaneGeometry(16, 16),
+            new THREE.MeshStandardMaterial({
+              map: CanvasEngine.createClassroomFloorTexture(),
+              roughness: 0.78,
+              metalness: 0.08
+            })
+          );
+          floor.rotation.x = -Math.PI / 2;
+          floor.receiveShadow = true;
+          this.scene.add(floor);
+
+          // Yellow Safety Tactile Paving Strip outside in front of the train box
+          const tactileStrip = new THREE.Mesh(
+            new THREE.BoxGeometry(3.4, 0.012, 0.42),
+            new THREE.MeshStandardMaterial({
+              map: CanvasEngine.createTactilePaverTexture(),
+              roughness: 0.68,
+              metalness: 0.05
+            })
+          );
+          tactileStrip.position.set(0, 0.006, 1.05);
+          tactileStrip.receiveShadow = true;
+          this.scene.add(tactileStrip);
+
+          // Glowing Step-In Floor Boarding Arrow Cue (active during Step 2: Open Doors & Board)
+          const arrowShape = new THREE.Shape();
+          arrowShape.moveTo(0, 0.24);
+          arrowShape.lineTo(0.18, 0.02); arrowShape.lineTo(0.08, 0.02);
+          arrowShape.lineTo(0.08, -0.22); arrowShape.lineTo(-0.08, -0.22);
+          arrowShape.lineTo(-0.08, 0.02); arrowShape.lineTo(-0.18, 0.02);
+          arrowShape.closePath();
+
+          const arrowMat = new THREE.MeshStandardMaterial({
+            color: 0x10b981,
+            emissive: 0x10b981,
+            emissiveIntensity: 0.25,
+            transparent: true,
+            opacity: 0.4
+          });
+          const stepInArrow = new THREE.Mesh(new THREE.ShapeGeometry(arrowShape), arrowMat);
+          stepInArrow.rotation.x = -Math.PI / 2;
+          stepInArrow.position.set(0, 0.008, 0.72);
+          this.scene.add(stepInArrow);
+          this.refs.stepInArrowMat = arrowMat;
+
+          // Subtle Classroom Perimeter Backdrop Wall + Overhead LED Troffer Light Bars
+          const backWall = new THREE.Mesh(
+            new THREE.BoxGeometry(10.5, 3.8, 0.16),
+            new THREE.MeshStandardMaterial({ color: 0x2a3547, roughness: 0.88, metalness: 0.04 })
+          );
+          backWall.position.set(0, 1.9, -3.4);
+          backWall.receiveShadow = true;
+          this.scene.add(backWall);
+
+          const ledMat = new THREE.MeshBasicMaterial({ color: 0xf0f9ff });
+          [-1.5, 1.5].forEach((lx) => {
+            const bar = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.04, 0.18), ledMat);
+            bar.position.set(lx, 3.6, 0.2);
+            this.scene.add(bar);
+          });
+        }
+
+        /**
+         * Exact 2.20m (W) x 1.00m (D) x 2.10m (H) Open-Top Mock MRT Carriage Vestibule Box
+         * Strictly NO ROOF/CEILING and NO INTERIOR GRAB POLES/PIPES
+         */
+        buildOpenTopCarriageShell() {
+          const group = new THREE.Group();
+          this.scene.add(group);
+
+          const extCladMat = this.makeCutawayMaterial(0xd8dee6, 0.44, 0.22);
+          const rearWallMat = this.makeCutawayMaterial(0xe8edf3, 0.52, 0.12);
+          const sideWallMat = this.makeCutawayMaterial(0xe2e8f0, 0.50, 0.16);
+          const smrtRedMat = new THREE.MeshStandardMaterial({ color: 0xd42e12, roughness: 0.36, metalness: 0.2 });
+          const trimMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.4, metalness: 0.55 });
+          const alumMat = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, roughness: 0.24, metalness: 0.82 });
+          const yellowSafetyMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.38, metalness: 0.15 });
+          const rubberMat = new THREE.MeshStandardMaterial({ color: 0x11151b, roughness: 0.85, metalness: 0.08 });
+          const doorGlassMat = new THREE.MeshPhysicalMaterial({
+            color: 0xbae6fd,
+            transparent: true,
+            opacity: 0.30,
+            roughness: 0.08,
+            metalness: 0.1,
+            clearcoat: 1.0
+          });
+
+          // 1. Clean Open Pole-Free Interior Non-Slip Floor (2.20m x 1.00m)
+          const interiorFloor = new THREE.Mesh(
+            new THREE.BoxGeometry(BOX.W, 0.036, BOX.D),
+            new THREE.MeshStandardMaterial({
+              map: CanvasEngine.createCarriageFloorTexture(),
+              roughness: 0.78,
+              metalness: 0.08
+            })
+          );
+          interiorFloor.position.set(0, 0.018, 0);
+          interiorFloor.receiveShadow = true;
+          group.add(interiorFloor);
+
+          // Brushed Aluminum Door Threshold Sill across 0.80m doorway
+          const sill = new THREE.Mesh(new THREE.BoxGeometry(BOX.doorW + 0.04, 0.014, 0.17), alumMat);
+          sill.position.set(0, 0.038, BOX.D / 2 - BOX.colD / 2);
+          group.add(sill);
+
+          // 2. Rear Interior Wall (2.20m W x 2.10m H at Z = -0.50)
+          const rearWall = new THREE.Mesh(new THREE.BoxGeometry(BOX.W, BOX.H, BOX.wallT), rearWallMat);
+          rearWall.position.set(0, BOX.H / 2, -BOX.D / 2 + BOX.wallT / 2);
+          rearWall.castShadow = true;
+          rearWall.receiveShadow = true;
+          group.add(rearWall);
+
+          // 3. Left & Right End-Walls (1.00m D x 2.10m H at X = -1.10 and X = +1.10)
+          [-1, 1].forEach((side) => {
+            const endWall = new THREE.Mesh(new THREE.BoxGeometry(BOX.wallT, BOX.H, BOX.D - BOX.colD), sideWallMat);
+            endWall.position.set(side * (BOX.W / 2 - BOX.wallT / 2), BOX.H / 2, -BOX.colD / 2);
+            endWall.castShadow = true;
+            endWall.receiveShadow = true;
+            group.add(endWall);
+          });
+
+          // 4. Hollow Front Flanking Wall Columns (0.70m W x 2.10m H x 0.16m D at Z = +0.34 .. +0.50)
+          //    Built as hollow carpentry cladding around internal vertical VESA & HDMI framing!
+          const colCenterZ = BOX.D / 2 - BOX.colD / 2; // +0.42
+          [-1, 1].forEach((side) => {
+            const cx = side * (BOX.doorW / 2 + BOX.pillarW / 2); // ±0.75
+
+            // Exterior front face cladding panel
+            const frontSkin = new THREE.Mesh(new THREE.BoxGeometry(BOX.pillarW, BOX.H, 0.016), extCladMat);
+            frontSkin.position.set(cx, BOX.H / 2, BOX.D / 2 - 0.008);
+            frontSkin.castShadow = true;
+            frontSkin.receiveShadow = true;
+            group.add(frontSkin);
+
+            // Interior rear face cladding panel (facing inward toward rear seats)
+            const backSkin = new THREE.Mesh(new THREE.BoxGeometry(BOX.pillarW, BOX.H, 0.016), extCladMat);
+            backSkin.position.set(cx, BOX.H / 2, BOX.D / 2 - BOX.colD + 0.008);
+            backSkin.receiveShadow = true;
+            group.add(backSkin);
+
+            // Outer side edge cladding
+            const outerSkin = new THREE.Mesh(new THREE.BoxGeometry(0.016, BOX.H, BOX.colD), extCladMat);
+            outerSkin.position.set(side * (BOX.W / 2 - 0.008), BOX.H / 2, colCenterZ);
+            group.add(outerSkin);
+
+            // Inner doorway jamb cladding
+            const innerSkin = new THREE.Mesh(new THREE.BoxGeometry(0.016, BOX.H, BOX.colD), extCladMat);
+            innerSkin.position.set(side * (BOX.doorW / 2 + 0.008), BOX.H / 2, colCenterZ);
+            group.add(innerSkin);
+
+            // Signature SMRT Red Exterior Livery Stripe on lower front facade
+            const redStripe = new THREE.Mesh(new THREE.BoxGeometry(BOX.pillarW + 0.004, 0.11, 0.008), smrtRedMat);
+            redStripe.position.set(cx, 0.68, BOX.D / 2 + 0.004);
+            group.add(redStripe);
+          });
+
+          // 5. Central Doorway Transom Header Above 0.80m Opening (Y = 1.72 .. 2.10)
+          const transomH = BOX.H - BOX.doorH;
+          const transomBox = new THREE.Mesh(new THREE.BoxGeometry(BOX.doorW, transomH, BOX.colD), extCladMat);
+          transomBox.position.set(0, BOX.doorH + transomH / 2, colCenterZ);
+          transomBox.castShadow = true;
+          group.add(transomBox);
+
+          // Yellow Door-Frame Safety Strips & Brushed Aluminum Lintel
+          [-BOX.doorW / 2, BOX.doorW / 2].forEach((dx) => {
+            const jamb = new THREE.Mesh(new THREE.BoxGeometry(0.022, BOX.doorH, BOX.colD + 0.008), yellowSafetyMat);
+            jamb.position.set(dx, BOX.doorH / 2, colCenterZ);
+            group.add(jamb);
+          });
+          const lintelTrim = new THREE.Mesh(new THREE.BoxGeometry(BOX.doorW + 0.024, 0.028, BOX.colD + 0.01), alumMat);
+          lintelTrim.position.set(0, BOX.doorH, colCenterZ);
+          group.add(lintelTrim);
+
+          // Open-Top Perimeter Cap Rails (reinforcing the crisp open-top classroom design)
+          const capFront = new THREE.Mesh(new THREE.BoxGeometry(BOX.W + 0.01, 0.024, BOX.colD + 0.01), trimMat);
+          capFront.position.set(0, BOX.H + 0.012, colCenterZ);
+          const capRear = new THREE.Mesh(new THREE.BoxGeometry(BOX.W + 0.01, 0.024, BOX.wallT + 0.01), trimMat);
+          capRear.position.set(0, BOX.H + 0.012, -BOX.D / 2 + BOX.wallT / 2);
+          [-1, 1].forEach((side) => {
+            const capSide = new THREE.Mesh(new THREE.BoxGeometry(BOX.wallT + 0.01, 0.024, BOX.D), trimMat);
+            capSide.position.set(side * (BOX.W / 2 - BOX.wallT / 2), BOX.H + 0.012, 0);
+            group.add(capSide);
+          });
+          group.add(capFront, capRear);
+
+          // 6. Motorized Biparting Sliding Glass Transit Doors (0.80m opening = 2x 0.40m leaves)
+          const createDoorLeaf = (side) => {
+            const leaf = new THREE.Group();
+            const lw = BOX.doorW / 2;
+            const lh = BOX.doorH - 0.04;
+
+            const kick = new THREE.Mesh(new THREE.BoxGeometry(lw, 0.34, 0.026), alumMat);
+            kick.position.y = 0.17;
+            const topRail = new THREE.Mesh(new THREE.BoxGeometry(lw, 0.075, 0.026), alumMat);
+            topRail.position.y = lh - 0.0375;
+            const outerStile = new THREE.Mesh(new THREE.BoxGeometry(0.042, lh, 0.026), alumMat);
+            outerStile.position.x = side * (lw / 2 - 0.021);
+            const innerStile = new THREE.Mesh(new THREE.BoxGeometry(0.034, lh, 0.026), alumMat);
+            innerStile.position.x = -side * (lw / 2 - 0.022);
+
+            // Black rubber meeting edge + red/yellow warning stripe
+            const gasket = new THREE.Mesh(new THREE.BoxGeometry(0.012, lh, 0.030), rubberMat);
+            gasket.position.x = -side * (lw / 2 - 0.006);
+            const yStripe = new THREE.Mesh(new THREE.BoxGeometry(lw - 0.04, 0.048, 0.029), yellowSafetyMat);
+            yStripe.position.y = 0.94;
+            const rStripe = new THREE.Mesh(new THREE.BoxGeometry(lw - 0.04, 0.022, 0.029), smrtRedMat);
+            rStripe.position.y = 0.895;
+
+            const glass = new THREE.Mesh(new THREE.BoxGeometry(lw - 0.076, lh - 0.415, 0.010), doorGlassMat);
+            glass.position.y = 0.34 + (lh - 0.415) / 2;
+
+            leaf.add(kick, topRail, outerStile, innerStile, gasket, yStripe, rStripe, glass);
+            leaf.position.set(side * (lw / 2), 0.038, colCenterZ);
+            return leaf;
+          };
+
+          const leftDoor = createDoorLeaf(-1);
+          const rightDoor = createDoorLeaf(1);
+          group.add(leftDoor, rightDoor);
+
+          // Door Status LED Indicator Strips on both exterior & interior transom sides
+          const statusLedMat = new THREE.MeshStandardMaterial({
+            color: 0x334155,
+            emissive: 0x000000,
+            emissiveIntensity: 0.0,
+            roughness: 0.2
+          });
+          [-0.42, 0.42].forEach((lx) => {
+            const extLed = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.28, 0.018), statusLedMat);
+            extLed.position.set(lx, 1.91, BOX.D / 2 + 0.009);
+            const intLed = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.28, 0.018), statusLedMat);
+            intLed.position.set(lx, 1.91, BOX.D / 2 - BOX.colD - 0.009);
+            group.add(extLed, intLed);
+          });
+
+          this.refs.doors = { leftDoor, rightDoor, statusLedMat };
+          this.registerInteractable(leftDoor, 'toggleDoors', 'Sliding Transit Doors — Click to Open / Close');
+          this.registerInteractable(rightDoor, 'toggleDoors', 'Sliding Transit Doors — Click to Open / Close');
+        }
+
+        /**
+         * 5 Standardized 32-Inch Commercial Displays:
+         * - Screen 1: Double-sided Overhead STARiS 2.0 Transom Display (readable from Platform & Seated Views)
+         * - Screens 2 & 3: Exterior (+Z) face of the left & right 0.70m front columns
+         * - Screens 4 & 5: Interior (-Z) reverse face DIRECTLY BEHIND Screens 2 & 3 on the exact same columns
+         */
+        buildBackToBackScreensAndTransom() {
+          const bezelMat = new THREE.MeshStandardMaterial({ color: 0x10141b, roughness: 0.35, metalness: 0.45 });
+          const extZ = BOX.D / 2 + 0.014;            // +0.514 (+Z exterior face of front columns)
+          const intZ = BOX.D / 2 - BOX.colD - 0.014; // +0.326 (-Z interior reverse face of front columns)
+
+          const createTV = (w, h, canvasObj, pos, rotY = 0) => {
+            const tv = new THREE.Group();
+            tv.position.copy(pos);
+            tv.rotation.y = rotY;
+
+            const chassis = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.026), bezelMat);
+            chassis.castShadow = true;
+            tv.add(chassis);
+
+            const screen = new THREE.Mesh(
+              new THREE.PlaneGeometry(w - 0.024, h - 0.024),
+              new THREE.MeshBasicMaterial({ map: canvasObj.texture })
+            );
+            screen.position.z = 0.014;
+            tv.add(screen);
+
+            this.scene.add(tv);
+            return tv;
+          };
+
+          // Screen 1: Overhead STARiS 2.0 Route Bar (readable on BOTH exterior +Z and interior -Z of transom)
+          const s1Canvas = CanvasEngine.createScreenObj(1280, 512);
+          const s1Ext = createTV(0.76, 0.31, s1Canvas, new THREE.Vector3(0, 1.91, extZ), 0);
+          const s1Int = createTV(0.76, 0.31, s1Canvas, new THREE.Vector3(0, 1.91, intZ), Math.PI);
+          this.registerInteractable(s1Ext, 'zoomRouteBar', 'Screen 1: STARiS 2.0 Route Bar — Click to Zoom');
+          this.registerInteractable(s1Int, 'zoomRouteBar', 'Screen 1: STARiS 2.0 Route Bar — Click to Zoom');
+
+          // Screens 2 & 3: Outside Platform Windows (+Z face of left & right 0.70m columns)
+          const s2Canvas = CanvasEngine.createScreenObj(1024, 576);
+          const s3Canvas = CanvasEngine.createScreenObj(1024, 576);
+          createTV(0.64, 0.38, s2Canvas, new THREE.Vector3(-0.75, 1.18, extZ), 0);
+          createTV(0.64, 0.38, s3Canvas, new THREE.Vector3(+0.75, 1.18, extZ), 0);
+
+          // Screens 4 & 5: Inside Carriage Windows (-Z reverse face DIRECTLY BEHIND Screens 2 & 3)
+          // Facing inward (-Z) toward the rear passenger bench.
+          // From seated view looking +Z: X = +0.75 is viewer's LEFT window (s4), X = -0.75 is viewer's RIGHT window (s5).
+          const s4Canvas = CanvasEngine.createScreenObj(1024, 576);
+          const s5Canvas = CanvasEngine.createScreenObj(1024, 576);
+          createTV(0.64, 0.38, s4Canvas, new THREE.Vector3(+0.75, 1.18, intZ), Math.PI);
+          createTV(0.64, 0.38, s5Canvas, new THREE.Vector3(-0.75, 1.18, intZ), Math.PI);
+
+          this.refs.screens = {
+            s1: s1Canvas,
+            s2: s2Canvas,
+            s3: s3Canvas,
+            s4: s4Canvas,
+            s5: s5Canvas
+          };
+        }
+
+        /**
+         * Authentic Interior Accessories & Transit Dressing:
+         * 1. 4-Seat Molded SMRT Bucket Bench (3 Blue + 1 Red Reserved/Priority Seat) along rear wall Z = -0.50
+         * 2. "Reserved / Priority Seat" Decal above red end seat
+         * 3. Printed Linear Singapore MRT System Map Decal above passenger seats
+         * 4. Red Octagon Door Safety Warning Stickers beside interior door jambs
+         * 5. Emergency Intercom & Door Release Faceplate on right side wall (X = +1.07)
+         * 6. Courtesy Mascot Campaign Poster on left side wall (X = -1.07)
+         */
+        buildInteriorSeatingAndDecals() {
+          const group = new THREE.Group();
+          this.scene.add(group);
+
+          const seatBlueMat = new THREE.MeshStandardMaterial({ color: 0x1d4ed8, roughness: 0.36, metalness: 0.12 });
+          const seatRedMat = new THREE.MeshStandardMaterial({ color: 0xc81e1e, roughness: 0.34, metalness: 0.12 });
+          const benchBoxMat = this.makeCutawayMaterial(0x94a3b8, 0.48, 0.35);
+          const ventDarkMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.6, metalness: 0.3 });
+          const trimMat = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, roughness: 0.3, metalness: 0.7 });
+
+          // 1. Enclosed Under-Seat Equipment Pedestal Base (Z = -0.44 .. -0.08, Y = 0.036 .. 0.43)
+          const benchW = 1.92;
+          const benchH = 0.39;
+          const benchD = 0.36;
+          const benchZ = -0.44 + benchD / 2; // -0.26
+
+          const baseFront = new THREE.Mesh(new THREE.BoxGeometry(benchW, benchH, 0.016), benchBoxMat);
+          baseFront.position.set(0, 0.036 + benchH / 2, benchZ + benchD / 2);
+          baseFront.castShadow = true;
+          baseFront.receiveShadow = true;
+          group.add(baseFront);
+
+          const baseTop = new THREE.Mesh(new THREE.BoxGeometry(benchW + 0.02, 0.022, benchD + 0.02), benchBoxMat);
+          baseTop.position.set(0, 0.435, benchZ);
+          baseTop.receiveShadow = true;
+          group.add(baseTop);
+
+          [-benchW / 2, benchW / 2].forEach((bx) => {
+            const endCap = new THREE.Mesh(new THREE.BoxGeometry(0.018, benchH, benchD), benchBoxMat);
+            endCap.position.set(bx, 0.036 + benchH / 2, benchZ);
+            group.add(endCap);
+          });
+
+          // Lower Dust-Filtered Louvered Intake Vents on the front under-seat kickplate
+          [-0.48, 0.48].forEach((vx) => {
+            const ventFrame = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.14, 0.012), ventDarkMat);
+            ventFrame.position.set(vx, 0.15, benchZ + benchD / 2 + 0.008);
+            group.add(ventFrame);
+            for (let s = 0; s < 5; s++) {
+              const slat = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.012, 0.014), trimMat);
+              slat.position.set(vx, 0.10 + s * 0.025, benchZ + benchD / 2 + 0.012);
+              slat.rotation.x = 0.4;
+              group.add(slat);
+            }
+          });
+
+          // 4 Molded Ergonomic SMRT Bucket Seats (3 Blue + 1 Red Reserved/Priority End Seat)
+          const seatPositionsX = [-0.70, -0.235, 0.235, 0.70];
+          seatPositionsX.forEach((sx, idx) => {
+            const isReserved = idx === 3; // Right end seat is the vibrant SMRT Red Priority Seat
+            const mat = isReserved ? seatRedMat : seatBlueMat;
+            const seatGroup = new THREE.Group();
+            seatGroup.position.set(sx, 0.45, benchZ + 0.01);
+
+            // Contoured Seat Pan
+            const pan = new THREE.Mesh(new THREE.BoxGeometry(0.43, 0.038, 0.34), mat);
+            pan.position.set(0, 0.015, 0.01);
+            pan.castShadow = true;
+            seatGroup.add(pan);
+
+            // Rounded Front Waterfall Lip
+            const lip = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.43, 12), mat);
+            lip.rotation.z = Math.PI / 2;
+            lip.position.set(0, 0.012, 0.175);
+            seatGroup.add(lip);
+
+            // Reclined Ergonomic Backrest
+            const back = new THREE.Mesh(new THREE.BoxGeometry(0.43, 0.42, 0.042), mat);
+            back.position.set(0, 0.22, -0.155);
+            back.rotation.x = -0.14;
+            back.castShadow = true;
+            seatGroup.add(back);
+
+            // Subtle Sculpted Lumbar Rib
+            const lumbar = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.06, 0.018), mat);
+            lumbar.position.set(0, 0.14, -0.13);
+            seatGroup.add(lumbar);
+
+            group.add(seatGroup);
+          });
+
+          // 2. Prominent "Reserved / Priority Seat" Decal directly above the Red End Seat (X = +0.70)
+          const rearFaceZ = -BOX.D / 2 + BOX.wallT + 0.005;
+          const reservedDecal = new THREE.Mesh(
+            new THREE.PlaneGeometry(0.44, 0.33),
+            new THREE.MeshBasicMaterial({ map: CanvasEngine.createReservedSeatDecalTexture() })
+          );
+          reservedDecal.position.set(0.70, 1.14, rearFaceZ);
+          group.add(reservedDecal);
+
+          // 3. Printed Linear Singapore MRT System Map Decal mounted on rear wall above seats
+          const mapFrame = new THREE.Mesh(
+            new THREE.BoxGeometry(1.18, 0.46, 0.012),
+            new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.4, metalness: 0.5 })
+          );
+          mapFrame.position.set(-0.22, 1.48, rearFaceZ);
+          group.add(mapFrame);
+
+          const mapDecal = new THREE.Mesh(
+            new THREE.PlaneGeometry(1.14, 0.42),
+            new THREE.MeshBasicMaterial({ map: CanvasEngine.createSystemMapDecalTexture() })
+          );
+          mapDecal.position.set(-0.22, 1.48, rearFaceZ + 0.008);
+          group.add(mapDecal);
+
+          // 4. Red Octagon Door Safety Warning Stickers beside interior door jambs
+          const warnTex = CanvasEngine.createDoorWarningDecalTexture();
+          const intColFaceZ = BOX.D / 2 - BOX.colD - 0.004;
+          [-0.45, 0.45].forEach((wx) => {
+            const sticker = new THREE.Mesh(
+              new THREE.PlaneGeometry(0.11, 0.165),
+              new THREE.MeshBasicMaterial({ map: warnTex })
+            );
+            sticker.position.set(wx, 1.54, intColFaceZ);
+            sticker.rotation.y = Math.PI;
+            group.add(sticker);
+          });
+
+          // 5. Emergency Intercom & Door Release Mock Faceplate on right interior side wall (X = +1.06)
+          const intercomBox = new THREE.Mesh(
+            new THREE.BoxGeometry(0.018, 0.42, 0.26),
+            new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.4, metalness: 0.6 })
+          );
+          intercomBox.position.set(BOX.W / 2 - BOX.wallT - 0.009, 1.32, -0.02);
+          group.add(intercomBox);
+
+          const intercomFace = new THREE.Mesh(
+            new THREE.PlaneGeometry(0.24, 0.39),
+            new THREE.MeshBasicMaterial({ map: CanvasEngine.createEmergencyIntercomTexture() })
+          );
+          intercomFace.position.set(BOX.W / 2 - BOX.wallT - 0.019, 1.32, -0.02);
+          intercomFace.rotation.y = -Math.PI / 2;
+          group.add(intercomFace);
+
+          // 6. Courtesy Campaign Poster ("Stand-Up Stacey & Give-Way Glenda") on left interior side wall (X = -1.06)
+          const posterFrame = new THREE.Mesh(
+            new THREE.BoxGeometry(0.014, 0.50, 0.38),
+            new THREE.MeshStandardMaterial({ color: 0x0f2942, roughness: 0.4, metalness: 0.4 })
+          );
+          posterFrame.position.set(-BOX.W / 2 + BOX.wallT + 0.007, 1.34, -0.02);
+          group.add(posterFrame);
+
+          const posterMesh = new THREE.Mesh(
+            new THREE.PlaneGeometry(0.35, 0.47),
+            new THREE.MeshBasicMaterial({ map: CanvasEngine.createCourtesyPosterTexture() })
+          );
+          posterMesh.position.set(-BOX.W / 2 + BOX.wallT + 0.015, 1.34, -0.02);
+          posterMesh.rotation.y = Math.PI / 2;
+          group.add(posterMesh);
+        }
+
+        /**
+         * Concealed Technical Hardware (Revealed in 3D Technical Cutaway / X-Ray Mode):
+         * - Under-seat Matte-Black Multi-GPU PC Tower + Twin Quiet Exhaust Fans + 6-Way Surge PDU + Master Cord
+         * - Hollow Front Columns: Back-to-Back VESA Brackets + Vertical Color-Coded HDMI Conduits
+         */
+        buildUnderSeatAndColumnTechHardware() {
+          const tech = new THREE.Group();
+          this.scene.add(tech);
+
+          const pcMat = new THREE.MeshStandardMaterial({ color: 0x11151b, roughness: 0.45, metalness: 0.52 });
+          const steelMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.35, metalness: 0.74 });
+          const conduitMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.5, metalness: 0.3 });
+
+          // 1. High-Performance Multi-Output PC Tower laid neatly inside the under-seat bay
+          const pcGroup = new THREE.Group();
+          pcGroup.position.set(-0.32, 0.21, -0.27);
+
+          const pcChassis = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.22, 0.26), pcMat);
+          pcChassis.castShadow = true;
+          pcGroup.add(pcChassis);
+
+          // Subtle Blue Power LED
+          const pcLed = new THREE.Mesh(
+            new THREE.BoxGeometry(0.016, 0.016, 0.012),
+            new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0ea5e9, emissiveIntensity: 2.4 })
+          );
+          pcLed.position.set(-0.18, 0.07, 0.132);
+          pcGroup.add(pcLed);
+
+          // Multi-GPU 5x HDMI Output Backplate on Right Side of PC
+          const gpuBackplate = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.14, 0.18), steelMat);
+          gpuBackplate.position.set(0.232, 0, -0.02);
+          pcGroup.add(gpuBackplate);
+          tech.add(pcGroup);
+
+          // 2. Twin Quiet Exhaust Fans mounted on rear wall of under-seat bay (gently spinning)
+          const fans = [];
+          const fanFrameMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.5 });
+          const bladeMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.35, metalness: 0.6 });
+
+          [-0.44, -0.20].forEach((fx) => {
+            const frame = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.13, 0.028), fanFrameMat);
+            frame.position.set(fx, 0.22, -0.42);
+            tech.add(frame);
+
+            const rotor = new THREE.Group();
+            rotor.position.set(fx, 0.22, -0.435);
+            const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.014, 12), pcMat);
+            hub.rotation.x = Math.PI / 2;
+            rotor.add(hub);
+            for (let b = 0; b < 5; b++) {
+              const blade = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.048, 0.008), bladeMat);
+              const ang = (b / 5) * Math.PI * 2;
+              blade.position.set(Math.sin(ang) * 0.032, Math.cos(ang) * 0.032, 0);
+              blade.rotation.z = -ang;
+              rotor.add(blade);
+            }
+            tech.add(rotor);
+            fans.push(rotor);
+          });
+          this.refs.exhaustFans = fans;
+
+          // 3. Internal 6-Way Surge-Protected Metal PDU Power Bar (right side under seats)
+          const pduGroup = new THREE.Group();
+          pduGroup.position.set(0.45, 0.14, -0.28);
+          const pduBar = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.055, 0.068), steelMat);
+          pduGroup.add(pduBar);
+
+          const pduSwitch = new THREE.Mesh(
+            new THREE.BoxGeometry(0.028, 0.026, 0.014),
+            new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xdc2626, emissiveIntensity: 2.0 })
+          );
+          pduSwitch.position.set(0.22, 0.01, 0.036);
+          pduGroup.add(pduSwitch);
+
+          for (let s = 0; s < 6; s++) {
+            const sock = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.028, 0.012), pcMat);
+            sock.position.set(-0.20 + s * 0.072, 0, 0.036);
+            pduGroup.add(sock);
+          }
+          tech.add(pduGroup);
+
+          // Single Heavy-Duty Master AC Power Cord exiting neatly at rear base of box
+          const cordMat = new THREE.MeshStandardMaterial({ color: 0x0f1318, roughness: 0.75 });
+          const masterCord = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.65, 10), cordMat);
+          masterCord.rotation.x = Math.PI / 2;
+          masterCord.position.set(0.68, 0.018, -0.78);
+          tech.add(masterCord);
+
+          // 4. Hollow Front Column Internals: Back-to-Back VESA Brackets & Vertical HDMI Conduits
+          const colCenterZ = BOX.D / 2 - BOX.colD / 2; // +0.42
+          const hdmiColors = [0xef4444, 0x3b82f6, 0x10b981, 0xf59e0b, 0xa855f7];
+
+          [-1, 1].forEach((side, colIdx) => {
+            const cx = side * 0.75;
+
+            // Internal Steel Vertical Structural Studs inside hollow 0.70m column
+            [-0.24, 0.24].forEach((ox) => {
+              const stud = new THREE.Mesh(new THREE.BoxGeometry(0.032, BOX.H - 0.08, 0.09), steelMat);
+              stud.position.set(cx + ox, BOX.H / 2, colCenterZ);
+              tech.add(stud);
+            });
+
+            // Back-to-Back Dual VESA Mounting Plate joining Exterior & Interior 32" TVs
+            const vesaBridge = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.24, 0.12), steelMat);
+            vesaBridge.position.set(cx, 1.18, colCenterZ);
+            tech.add(vesaBridge);
+
+            // Vertical HDMI + Power Conduit running cleanly from TVs down to floor plenum
+            const vConduit = new THREE.Mesh(new THREE.BoxGeometry(0.045, 1.92, 0.045), conduitMat);
+            vConduit.position.set(cx + side * 0.12, 0.98, colCenterZ);
+            tech.add(vConduit);
+
+            // Color-coded HDMI Cables inside column & routing along side base into under-seat PC bay
+            const cCount = colIdx === 0 ? 2 : 3;
+            for (let k = 0; k < cCount; k++) {
+              const colHex = hdmiColors[(colIdx * 2 + k) % hdmiColors.length];
+              const cMat = new THREE.MeshStandardMaterial({ color: colHex, roughness: 0.45 });
+
+              const vertCable = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 1.15, 8), cMat);
+              vertCable.position.set(cx + side * 0.12 + (k - 1) * 0.012, 0.62, colCenterZ - 0.025);
+              tech.add(vertCable);
+
+              const floorCable = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.76, 8), cMat);
+              floorCable.rotation.x = Math.PI / 2;
+              floorCable.position.set(cx + side * 0.12 + (k - 1) * 0.012, 0.055, 0.04);
+              tech.add(floorCable);
+            }
+          });
+        }
+      }
+
+      /* =========================================================================
+       * 5. SMOOTH CUBIC EASE-IN-OUT CAMERA CONTROLLER
+       * ========================================================================= */
+      class CameraController {
+        constructor(camera, controls) {
+          this.camera = camera;
+          this.controls = controls;
+          this.tween = null;
+          this.controls.addEventListener('start', () => { this.tween = null; });
+        }
+
+        flyTo(presetKey, duration = 920) {
+          const p = CAMERA_PRESETS[presetKey];
+          if (!p) return;
+          this.tween = {
+            startPos: this.camera.position.clone(),
+            endPos: p.pos.clone(),
+            startTarget: this.controls.target.clone(),
+            endTarget: p.target.clone(),
+            startTime: performance.now(),
+            duration
+          };
+        }
+
+        update(now) {
+          if (this.tween) {
+            const elapsed = now - this.tween.startTime;
+            let t = Math.min(1, elapsed / this.tween.duration);
+            t = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+            this.camera.position.lerpVectors(this.tween.startPos, this.tween.endPos, t);
+            this.controls.target.lerpVectors(this.tween.startTarget, this.tween.endTarget, t);
+
+            if (elapsed >= this.tween.duration) this.tween = null;
+          }
+          this.controls.update();
+        }
+      }
+
+      /* =========================================================================
+       * 6. MAIN MODULE 3 SIMULATION CONTROLLER
+       * ========================================================================= */
+      class VirtualTrainBoxApp {
+        constructor() {
+          this.container = document.getElementById('canvas-container');
+          this.tooltip = document.getElementById('hover-tooltip');
+          this.audio = new TrainAudioEngine();
+          this.raycaster = new THREE.Raycaster();
+          this.pointer = new THREE.Vector2();
+          this.downPos = { x: 0, y: 0 };
+          this.toastTimer = null;
+          this.currentView = 'platform';
+          this.cutawayEnabled = false;
+
+          this.sim = {
+            phase: PHASE.IDLE,
+            doorTarget: 0,
+            doorOpenAmount: 0,
+            outsideTrainX: 4200,
+            outsideTrainTargetX: 4200,
+            journeyDist: 0,
+            trainSpeed: 0,
+            targetSpeed: 0
+          };
+
+          this.initThree();
+          this.builder = new VirtualTrainBoxBuilder(this.scene);
+          this.builder.buildAll();
+
+          this.camCtrl = new CameraController(this.camera, this.controls);
+
+          this.bindHUD();
+          this.bindRaycasting();
+          this.updatePhaseHUD();
+          this.onResize();
+        }
+
+        initThree() {
+          this.scene = new THREE.Scene();
+          this.scene.background = new THREE.Color(0x162032);
+          this.scene.fog = new THREE.FogExp2(0x162032, 0.044);
+
+          const w = this.container.clientWidth || window.innerWidth;
+          const h = this.container.clientHeight || window.innerHeight;
+
+          this.camera = new THREE.PerspectiveCamera(48, w / h, 0.04, 50);
+          this.camera.position.copy(CAMERA_PRESETS.platform.pos);
+
+          this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+          this.renderer.setSize(w, h);
+          this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+          this.renderer.shadowMap.enabled = true;
+          this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+          this.renderer.outputEncoding = THREE.sRGBEncoding;
+          this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+          this.renderer.toneMappingExposure = 1.08;
+          this.container.appendChild(this.renderer.domElement);
+
+          this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
+          this.controls.enableDamping = true;
+          this.controls.dampingFactor = 0.07;
+          this.controls.minDistance = 0.22;
+          this.controls.maxDistance = 7.2;
+          this.controls.maxPolarAngle = Math.PI / 2 - 0.02;
+          this.controls.target.copy(CAMERA_PRESETS.platform.target);
+          this.controls.update();
+        }
+
+        /* ---------------- Journey Sequencer Actions ---------------- */
+
+        blinkRfLed() {
+          const led = document.getElementById('rf-led');
+          led.classList.remove('rf-tx-active');
+          void led.offsetWidth;
+          led.classList.add('rf-tx-active');
+        }
+
+        step1TrainArriving() {
+          this.blinkRfLed();
+          this.audio.playRemoteClick(880);
+          this.sim.phase = PHASE.ARRIVING;
+          this.sim.doorTarget = 0;
+          this.sim.outsideTrainX = 3600;
+          this.sim.outsideTrainTargetX = 0;
+          this.sim.journeyDist = 0;
+          this.sim.trainSpeed = 0;
+          this.sim.targetSpeed = 0;
+
+          this.audio.playTrainArrivalBrake();
+          this.updatePhaseHUD();
+          this.showToast('1. Train Arriving at Ang Mo Kio — Stand Behind Yellow Line', 'bg-amber-400');
+        }
+
+        step2OpenDoorsAndBoard() {
+          this.blinkRfLed();
+          this.audio.playRemoteClick(960);
+          this.sim.phase = PHASE.BOARDING;
+          this.sim.outsideTrainTargetX = 0;
+          if (this.sim.outsideTrainX > 2000) this.sim.outsideTrainX = 0;
+          this.sim.doorTarget = 1;
+          this.sim.trainSpeed = 0;
+          this.sim.targetSpeed = 0;
+
+          this.audio.playArrivalChime();
+          this.updatePhaseHUD();
+          this.showToast('2. Doors Open — Step Inside & Try Seated Passenger View!', 'bg-emerald-400');
+        }
+
+        step3DoorsClosingWarning() {
+          this.blinkRfLed();
+          this.audio.playRemoteClick(820);
+          this.sim.phase = PHASE.CLOSING;
+          this.sim.doorTarget = 0;
+          this.audio.playDoorClosingChime();
+          this.updatePhaseHUD();
+          this.showToast('3. Warning: Doors Closing — Please Stand Clear', 'bg-rose-500');
+        }
+
+        step4DepartStation() {
+          this.blinkRfLed();
+          this.audio.playRemoteClick(1040);
+          this.sim.phase = PHASE.IN_MOTION;
+          this.sim.doorTarget = 0;
+          this.sim.outsideTrainTargetX = -4200;
+          if (this.sim.journeyDist > 10000) this.sim.journeyDist = 0;
+          this.sim.targetSpeed = 1450;
+
+          this.audio.playTractionMotor(true);
+          this.updatePhaseHUD();
+          this.showToast('4. Departing Ang Mo Kio — Tunnel to Elevated HDB Scenery Active', 'bg-sky-400');
+        }
+
+        step5ArriveNextStation() {
+          this.blinkRfLed();
+          this.audio.playRemoteClick(1120);
+          this.sim.phase = PHASE.ARRIVED_NEXT;
+          if (this.sim.journeyDist < 10900) this.sim.journeyDist = 11100;
+          this.sim.targetSpeed = 0;
+          this.sim.outsideTrainX = 0;
+          this.sim.outsideTrainTargetX = 0;
+
+          this.audio.playTractionMotor(false);
+          setTimeout(() => {
+            if (this.sim.phase === PHASE.ARRIVED_NEXT) {
+              this.sim.doorTarget = 1;
+              this.audio.playArrivalChime('Next station, Yio Chu Kang. Doors opening on this side.');
+              this.showToast('5. Next Station: Yio Chu Kang (NS15) — Doors Opening This Side', 'bg-emerald-400');
+            }
+          }, 1150);
+
+          this.updatePhaseHUD();
+          this.showToast('5. Decelerating into Yio Chu Kang Station...', 'bg-teal-400');
+        }
+
+        step6ResetSimulation() {
+          this.blinkRfLed();
+          this.audio.stopContinuous();
+          this.audio.playRemoteClick(720);
+          this.sim.phase = PHASE.IDLE;
+          this.sim.doorTarget = 0;
+          this.sim.outsideTrainX = 4200;
+          this.sim.outsideTrainTargetX = 4200;
+          this.sim.journeyDist = 0;
+          this.sim.trainSpeed = 0;
+          this.sim.targetSpeed = 0;
+          this.setCutaway(false);
+
+          this.updatePhaseHUD();
+          this.showToast('Simulation Reset to Initial Platform Idle State', 'bg-slate-400');
+        }
+
+        toggleDoorsDirectly() {
+          if (this.sim.phase === PHASE.IN_MOTION) {
+            this.showToast('Doors are interlocked while train is in motion!', 'bg-rose-500');
+            return;
+          }
+          if (this.sim.doorTarget === 0) this.step2OpenDoorsAndBoard();
+          else this.step3DoorsClosingWarning();
+        }
+
+        setCutaway(enabled) {
+          this.cutawayEnabled = enabled;
+          const dot = document.getElementById('cutaway-dot');
+          const btn = document.getElementById('btn-cutaway-toggle');
+          dot.className = enabled ? 'w-2 h-2 rounded-full bg-sky-400' : 'w-2 h-2 rounded-full bg-slate-500';
+          btn.classList.toggle('border-sky-400/60', enabled);
+          btn.classList.toggle('text-sky-300', enabled);
+        }
+
+        updatePhaseHUD() {
+          const map = {
+            [PHASE.IDLE]: { label: 'Phase: Platform Idle (Ang Mo Kio NS16)', dot: 'bg-slate-400' },
+            [PHASE.ARRIVING]: { label: 'Phase 1: Train Arriving at Platform', dot: 'bg-amber-400' },
+            [PHASE.BOARDING]: { label: 'Phase 2: Doors Open — Boarding Carriage', dot: 'bg-emerald-400' },
+            [PHASE.CLOSING]: { label: 'Phase 3: Doors Closing Warning', dot: 'bg-rose-500' },
+            [PHASE.IN_MOTION]: { label: 'Phase 4: In Motion (Ang Mo Kio → Yio Chu Kang)', dot: 'bg-sky-400' },
+            [PHASE.ARRIVED_NEXT]: { label: 'Phase 5: Arrived at Yio Chu Kang (NS15)', dot: 'bg-teal-400' }
+          };
+          const info = map[this.sim.phase];
+          document.getElementById('phase-pill').textContent = info.label;
+          document.getElementById('phase-dot').className = `inline-block w-2 h-2 rounded-full ${info.dot} shrink-0`;
+        }
+
+        showToast(msg, dotClass = 'bg-emerald-400') {
+          const toast = document.getElementById('status-toast');
+          document.getElementById('toast-text').textContent = msg;
+          document.getElementById('toast-dot').className = `w-2.5 h-2.5 rounded-full ${dotClass} shrink-0`;
+
+          toast.classList.remove('opacity-0', '-translate-y-2');
+          toast.classList.add('opacity-100', 'translate-y-0');
+
+          if (this.toastTimer) clearTimeout(this.toastTimer);
+          this.toastTimer = setTimeout(() => {
+            toast.classList.remove('opacity-100', 'translate-y-0');
+            toast.classList.add('opacity-0', '-translate-y-2');
+          }, 3400);
+        }
+
+        switchCameraView(viewKey) {
+          this.currentView = viewKey;
+          this.camCtrl.flyTo(viewKey);
+
+          // Automatically enable translucent cutaway shell in 3D Technical Cutaway view
+          this.setCutaway(viewKey === 'cutaway');
+
+          document.querySelectorAll('.cam-btn').forEach((b) => {
+            const active = b.dataset.view === viewKey;
+            b.className = active
+              ? 'cam-btn px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer bg-[#d42e12] text-white shadow-sm'
+              : 'cam-btn px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer text-slate-200 hover:bg-slate-700/60';
+          });
+        }
+
+        /* ---------------- Event Bindings ---------------- */
+
+        bindHUD() {
+          document.querySelectorAll('.cam-btn').forEach((btn) => {
+            btn.addEventListener('click', () => {
+              this.audio.playRemoteClick(860);
+              this.switchCameraView(btn.dataset.view);
+            });
+          });
+
+          document.getElementById('btn-cutaway-toggle').addEventListener('click', () => {
+            this.audio.playRemoteClick(900);
+            this.setCutaway(!this.cutawayEnabled);
+            this.showToast(
+              this.cutawayEnabled ? 'Cutaway X-Ray Shell Enabled — Inspecting Hidden PC & Conduits' : 'Solid Carpentry Shell Restored',
+              this.cutawayEnabled ? 'bg-sky-400' : 'bg-slate-400'
+            );
+          });
+
+          document.getElementById('btn-seq-1').addEventListener('click', () => this.step1TrainArriving());
+          document.getElementById('btn-seq-2').addEventListener('click', () => this.step2OpenDoorsAndBoard());
+          document.getElementById('btn-seq-3').addEventListener('click', () => this.step3DoorsClosingWarning());
+          document.getElementById('btn-seq-4').addEventListener('click', () => this.step4DepartStation());
+          document.getElementById('btn-seq-5').addEventListener('click', () => this.step5ArriveNextStation());
+          document.getElementById('btn-seq-6').addEventListener('click', () => this.step6ResetSimulation());
+
+          document.getElementById('btn-audio').addEventListener('click', () => {
+            const muted = this.audio.toggleMute();
+            document.getElementById('icon-audio-on').classList.toggle('hidden', muted);
+            document.getElementById('icon-audio-off').classList.toggle('hidden', !muted);
+            this.showToast(muted ? 'Audio Muted' : 'Audio Enabled', muted ? 'bg-rose-400' : 'bg-emerald-400');
+          });
+
+          window.addEventListener('resize', () => this.onResize());
+        }
+
+        bindRaycasting() {
+          const dom = this.renderer.domElement;
+
+          dom.addEventListener('pointerdown', (e) => {
+            this.downPos = { x: e.clientX, y: e.clientY };
+          });
+
+          dom.addEventListener('pointermove', (e) => {
+            const rect = dom.getBoundingClientRect();
+            this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+            this.raycaster.setFromCamera(this.pointer, this.camera);
+            const hits = this.raycaster.intersectObjects(this.builder.interactables, false);
+
+            if (hits.length > 0) {
+              dom.style.cursor = 'pointer';
+              this.tooltip.textContent = hits[0].object.userData.tooltip;
+              this.tooltip.style.left = `${e.clientX}px`;
+              this.tooltip.style.top = `${e.clientY}px`;
+              this.tooltip.style.opacity = '1';
+            } else {
+              dom.style.cursor = 'grab';
+              this.tooltip.style.opacity = '0';
+            }
+          });
+
+          dom.addEventListener('pointerleave', () => {
+            this.tooltip.style.opacity = '0';
+          });
+
+          dom.addEventListener('pointerup', (e) => {
+            if (Math.hypot(e.clientX - this.downPos.x, e.clientY - this.downPos.y) > 6) return;
+
+            const rect = dom.getBoundingClientRect();
+            this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+            this.raycaster.setFromCamera(this.pointer, this.camera);
+            const hits = this.raycaster.intersectObjects(this.builder.interactables, false);
+            if (hits.length === 0) return;
+
+            const action = hits[0].object.userData.actionId;
+            if (action === 'toggleDoors') {
+              this.toggleDoorsDirectly();
+            } else if (action === 'zoomRouteBar') {
+              this.audio.playRemoteClick(940);
+              this.switchCameraView('routeBar');
+            }
+          });
+        }
+
+        onResize() {
+          const w = this.container.clientWidth || window.innerWidth;
+          const h = this.container.clientHeight || window.innerHeight;
+          this.camera.aspect = w / h;
+          this.camera.updateProjectionMatrix();
+          this.renderer.setSize(w, h);
+        }
+
+        /* ---------------- Real-Time Physics & Animation Loop ---------------- */
+
+        updateSimulation(dt, timeSec) {
+          // 1. Sliding 3D Glass Transit Doors
+          const dDiff = this.sim.doorTarget - this.sim.doorOpenAmount;
+          if (Math.abs(dDiff) > 0.002) {
+            this.sim.doorOpenAmount += Math.sign(dDiff) * Math.min(Math.abs(dDiff), dt * 1.15);
+          } else {
+            this.sim.doorOpenAmount = this.sim.doorTarget;
+          }
+          const slideDist = this.sim.doorOpenAmount * 0.375;
+          const lw = BOX.doorW / 2;
+          this.builder.refs.doors.leftDoor.position.x = -lw / 2 - slideDist;
+          this.builder.refs.doors.rightDoor.position.x = lw / 2 + slideDist;
+
+          // 2. Door Transom LED Status Bars
+          const ledMat = this.builder.refs.doors.statusLedMat;
+          const flash = Math.sin(timeSec * 12) > 0;
+          if (this.sim.phase === PHASE.CLOSING) {
+            ledMat.color.setHex(0xef4444); ledMat.emissive.setHex(0xef4444);
+            ledMat.emissiveIntensity = flash ? 2.4 : 0.2;
+          } else if (this.sim.phase === PHASE.BOARDING || this.sim.phase === PHASE.ARRIVED_NEXT) {
+            ledMat.color.setHex(0x10b981); ledMat.emissive.setHex(0x10b981);
+            ledMat.emissiveIntensity = 1.6 + 0.5 * Math.sin(timeSec * 5);
+          } else if (this.sim.phase === PHASE.ARRIVING) {
+            ledMat.color.setHex(0xf59e0b); ledMat.emissive.setHex(0xf59e0b);
+            ledMat.emissiveIntensity = flash ? 2.0 : 0.3;
+          } else {
+            ledMat.color.setHex(0x334155); ledMat.emissive.setHex(0x000000);
+            ledMat.emissiveIntensity = 0.0;
+          }
+
+          // 3. Floor Boarding Arrow Pulse
+          const arrowMat = this.builder.refs.stepInArrowMat;
+          if (this.sim.phase === PHASE.BOARDING) {
+            arrowMat.opacity = 0.55 + 0.4 * Math.sin(timeSec * 6);
+            arrowMat.emissiveIntensity = 1.2 + 0.8 * Math.sin(timeSec * 6);
+          } else {
+            arrowMat.opacity = 0.14;
+            arrowMat.emissiveIntensity = 0.1;
+          }
+
+          // 4. Exterior Train Approach / Departure Physics (Screens 2 & 3)
+          const txDiff = this.sim.outsideTrainTargetX - this.sim.outsideTrainX;
+          if (Math.abs(txDiff) > 2) {
+            this.sim.outsideTrainX += txDiff * Math.min(1, dt * 1.65);
+          } else {
+            this.sim.outsideTrainX = this.sim.outsideTrainTargetX;
+          }
+
+          // 5. Interior Panoramic Journey Physics (Screens 4 & 5)
+          if (this.sim.phase === PHASE.IN_MOTION) {
+            this.sim.trainSpeed += (this.sim.targetSpeed - this.sim.trainSpeed) * Math.min(1, dt * 0.9);
+            this.sim.journeyDist += this.sim.trainSpeed * dt;
+            if (this.sim.journeyDist > 10300) this.sim.journeyDist = 6400;
+          } else if (this.sim.phase === PHASE.ARRIVED_NEXT) {
+            const rem = 12400 - this.sim.journeyDist;
+            if (Math.abs(rem) > 2) this.sim.journeyDist += rem * Math.min(1, dt * 2.1);
+            else this.sim.journeyDist = 12400;
+          }
+
+          // 6. Spinning Under-Seat Quiet Exhaust Fans
+          if (this.builder.refs.exhaustFans) {
+            this.builder.refs.exhaustFans.forEach((rotor) => {
+              rotor.rotation.z += dt * 5.0;
+            });
+          }
+
+          // 7. Smooth Translucent Cutaway Shell Transition (X-Ray Technical Inspection)
+          const targetOp = this.cutawayEnabled ? 0.18 : 1.0;
+          this.builder.cutawayMats.forEach((m) => {
+            m.opacity += (targetOp - m.opacity) * Math.min(1, dt * 6.5);
+            m.depthWrite = m.opacity > 0.85;
+          });
+        }
+
+        start() {
+          let lastTime = performance.now();
+          let lastCanvasTick = 0;
+
+          const animate = (now) => {
+            requestAnimationFrame(animate);
+            const dt = Math.min(0.05, (now - lastTime) / 1000);
+            lastTime = now;
+            const timeSec = now * 0.001;
+
+            this.camCtrl.update(now);
+            this.updateSimulation(dt, timeSec);
+
+            if (now - lastCanvasTick > 36) {
+              const sc = this.builder.refs.screens;
+              CanvasEngine.renderStarisScreen(sc.s1, this.sim, timeSec);
+              CanvasEngine.renderOutsideWindow(sc.s2, 'left', this.sim);
+              CanvasEngine.renderOutsideWindow(sc.s3, 'right', this.sim);
+              CanvasEngine.renderInsideWindow(sc.s4, 'left', this.sim);
+              CanvasEngine.renderInsideWindow(sc.s5, 'right', this.sim);
+              lastCanvasTick = now;
+            }
+
+            this.renderer.render(this.scene, this.camera);
+          };
+          requestAnimationFrame(animate);
+        }
+      }
+
+      /* =========================================================================
+       * 7. BOOTSTRAP ON WINDOW LOAD
+       * ========================================================================= */
+      window.onload = function () {
+        try {
+          const app = new VirtualTrainBoxApp();
+          app.start();
+        } catch (err) {
+          console.error('Failed to initialize Module 3 Virtual Train Box Simulation:', err);
+        }
+      };
+    })();
+  </script>
+</body>
+</html>

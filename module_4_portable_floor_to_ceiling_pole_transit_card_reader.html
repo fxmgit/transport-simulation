@@ -1,0 +1,2008 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Module 4: Portable Floor-to-Ceiling Pole Transit Card Reader</title>
+
+  <!-- Google Fonts (Inter) & Tailwind CSS CDN -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Three.js (r128) & OrbitControls CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #0f172a;
+      color: #f8fafc;
+      user-select: none;
+    }
+
+    #canvas-container {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 1;
+    }
+
+    #canvas-container canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      outline: none;
+    }
+
+    /* Dark Glassmorphism HUD Surfaces */
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.78);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      box-shadow: 0 12px 34px -8px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+
+    /* Tactile Teacher Wireless Remote HUD */
+    .hud-remote {
+      background: linear-gradient(165deg, rgba(30, 41, 59, 0.90) 0%, rgba(15, 23, 42, 0.94) 100%);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(148, 163, 184, 0.26);
+      box-shadow:
+        0 20px 44px -10px rgba(0, 0, 0, 0.75),
+        inset 0 1px 1px rgba(255, 255, 255, 0.12);
+    }
+
+    .tactile-btn {
+      box-shadow: 0 2px 0 rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+      transition: transform 0.08s ease, box-shadow 0.08s ease, background-color 0.15s ease;
+    }
+
+    .tactile-btn:active {
+      transform: translateY(1.5px);
+      box-shadow: 0 1px 0 rgba(0, 0, 0, 0.6), inset 0 1px 2px rgba(0, 0, 0, 0.35);
+    }
+
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    /* Raycast Hover Tooltip */
+    #hover-tooltip {
+      position: fixed;
+      z-index: 35;
+      pointer-events: none;
+      transform: translate(-50%, -140%);
+      transition: opacity 0.14s ease;
+    }
+  </style>
+</head>
+<body>
+  <!-- Full-Viewport 3D WebGL Viewport -->
+  <div id="canvas-container" aria-label="Module 4 Portable Floor-to-Ceiling Pole Transit Card Reader"></div>
+
+  <!-- 3D Raycast Hover Tooltip -->
+  <div id="hover-tooltip" class="glass-panel rounded-xl px-3 py-1.5 text-xs font-semibold text-teal-200 opacity-0 whitespace-nowrap border-teal-400/40">
+    Click to interact
+  </div>
+
+  <!-- Top Sleek Dark Glassmorphism Header Bar -->
+  <header class="fixed top-3 left-3 right-3 z-20 pointer-events-none flex flex-col xl:flex-row xl:items-center xl:justify-between gap-2.5">
+    <!-- Branding, Power Status Badge & Mute Button -->
+    <div class="glass-panel pointer-events-auto rounded-2xl px-4 py-2.5 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-[#00897B] to-[#005b52] flex items-center justify-center border border-teal-300/40 shadow-inner shrink-0">
+          <span class="text-xs font-extrabold tracking-tight text-white">M4</span>
+        </div>
+        <div class="min-w-0">
+          <h1 class="text-sm sm:text-base font-bold tracking-tight text-white truncate">
+            Module 4: Portable Floor-to-Ceiling Pole Transit Card Reader
+          </h1>
+          <div class="flex items-center gap-2 text-[11px] text-slate-300 mt-0.5">
+            <span id="power-badge-dot" class="inline-block w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
+            <span id="power-badge-text" class="font-semibold text-emerald-300 truncate">Cord-Free Battery (88%)</span>
+            <span class="hidden sm:inline text-slate-500">&bull;</span>
+            <span id="mode-badge-text" class="hidden sm:inline text-cyan-300 font-medium">Mode: ENTRY (Boarding)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Audio Mute Toggle -->
+      <div class="flex items-center gap-1.5 shrink-0">
+        <button id="btn-audio" title="Mute / Unmute Audio"
+          class="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-teal-300 border border-slate-600/40 transition-colors cursor-pointer">
+          <svg id="icon-audio-on" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M11 5L6 9H2v6h4l5 4V5z" />
+            <path d="M15.54 8.46a5 5 0 010 7.07M19.07 4.93a10 10 0 010 14.14" stroke-linecap="round" />
+          </svg>
+          <svg id="icon-audio-off" class="w-4 h-4 hidden text-rose-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M11 5L6 9H2v6h4l5 4V5z" />
+            <path d="M23 9l-6 6M17 9l6 6" stroke-linecap="round" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- 4 Smooth-Lerping Camera Preset Buttons -->
+    <nav class="glass-panel pointer-events-auto rounded-2xl p-1.5 flex items-center gap-1 overflow-x-auto no-scrollbar" aria-label="Camera Presets">
+      <button data-view="eyeLevel" class="cam-btn px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer bg-[#00897B] text-white shadow-sm">
+        Student Eye-Level View
+      </button>
+      <button data-view="fullPole" class="cam-btn px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer text-slate-200 hover:bg-slate-700/60">
+        Full Tension Pole View
+      </button>
+      <button data-view="rearPort" class="cam-btn px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer text-slate-200 hover:bg-slate-700/60">
+        Rear Charging Port Close-up
+      </button>
+      <button data-view="hingedAccess" class="cam-btn px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer text-slate-200 hover:bg-slate-700/60">
+        Hinged Access View
+      </button>
+    </nav>
+  </header>
+
+  <!-- Live Feedback Toast Notification -->
+  <div id="status-toast" class="fixed top-28 sm:top-24 left-1/2 -translate-x-1/2 z-30 glass-panel rounded-2xl px-4 py-2 text-xs sm:text-sm font-medium text-white flex items-center gap-2.5 transition-all duration-300 opacity-0 -translate-y-2 pointer-events-none border-teal-400/40 max-w-[92vw]">
+    <span id="toast-dot" class="w-2.5 h-2.5 rounded-full bg-teal-400 shrink-0"></span>
+    <span id="toast-text" class="truncate">Ready — Tap Card or Use Teacher Controls</span>
+  </div>
+
+  <!-- Bottom-Left Hardware Spec Summary (Desktop) -->
+  <div class="hidden lg:flex fixed bottom-3 left-3 z-20 glass-panel rounded-2xl px-3.5 py-2.5 flex-col gap-1 text-[11px] text-slate-300">
+    <div class="font-bold text-white flex items-center gap-2">
+      <span class="w-2 h-2 rounded-full bg-[#F2B705]"></span>
+      <span>100% Portable Tension Stanchion Validator</span>
+    </div>
+    <div>Pole: <strong class="text-slate-100">45mm Yellow Steel &bull; 2.40m Floor-to-Ceiling</strong> (Zero Floor Anchors)</div>
+    <div>Casing: <strong class="text-slate-100">180 &times; 320 &times; 75mm</strong> &bull; Portrait 8&quot; Tablet (Software LEDs)</div>
+    <div class="text-slate-400">Click 3D card/tap pad, side latch, or rear USB-C port directly</div>
+  </div>
+
+  <!-- Floating "Teacher Wireless Control HUD" Panel (Bottom-Right, Collapsible on Small Screens) -->
+  <aside id="teacher-hud" class="fixed bottom-3 right-3 z-25 w-64 sm:w-72 hud-remote rounded-3xl p-3.5 transition-all duration-200">
+    <!-- Panel Header + Mobile Collapse Toggle -->
+    <div class="flex items-center justify-between pb-2 border-b border-slate-700/70">
+      <div>
+        <div class="text-[9px] font-bold uppercase tracking-widest text-teal-400">2.4GHz Wireless Clicker</div>
+        <div class="text-xs font-bold text-white">Teacher Control HUD</div>
+      </div>
+      <button id="btn-collapse-hud" class="p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-600/40 transition-colors cursor-pointer" title="Collapse / Expand Controls">
+        <svg id="icon-collapse" class="w-4 h-4 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </button>
+    </div>
+
+    <!-- Collapsible Controls Body -->
+    <div id="teacher-hud-body" class="mt-2.5 flex flex-col gap-1.5">
+      <button id="btn-tap-concession"
+        class="tactile-btn w-full px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-left flex items-center justify-between cursor-pointer">
+        <span class="text-[11px] font-bold">Tap Valid Card (Concession)</span>
+        <span class="text-[10px] font-mono bg-black/20 px-1.5 py-0.5 rounded">-$0.45</span>
+      </button>
+
+      <button id="btn-tap-adult"
+        class="tactile-btn w-full px-3 py-2 rounded-xl bg-[#00897B] hover:bg-[#009688] text-white text-left flex items-center justify-between cursor-pointer">
+        <span class="text-[11px] font-bold">Tap Valid Card (Adult)</span>
+        <span class="text-[10px] font-mono bg-black/20 px-1.5 py-0.5 rounded">-$0.92</span>
+      </button>
+
+      <button id="btn-tap-erratic"
+        class="tactile-btn w-full px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-left flex items-center justify-between cursor-pointer">
+        <span class="text-[11px] font-bold">Erratic / Fast Tap (&lt;80ms)</span>
+        <span class="text-[10px] font-extrabold bg-black/15 px-1.5 py-0.5 rounded">ERR</span>
+      </button>
+
+      <button id="btn-tap-lowbal"
+        class="tactile-btn w-full px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-left flex items-center justify-between cursor-pointer">
+        <span class="text-[11px] font-bold">Simulate Low Balance Error</span>
+        <span class="text-[10px] font-mono bg-black/20 px-1.5 py-0.5 rounded">$0.40</span>
+      </button>
+
+      <div class="h-px bg-slate-700/70 my-0.5"></div>
+
+      <button id="btn-toggle-mode"
+        class="tactile-btn w-full px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-left flex items-center justify-between cursor-pointer">
+        <span class="text-[11px] font-bold">Toggle Entry / Exit Mode</span>
+        <span id="lbl-mode-pill" class="text-[10px] font-extrabold bg-black/25 px-1.5 py-0.5 rounded">ENTRY</span>
+      </button>
+
+      <button id="btn-toggle-clamshell"
+        class="tactile-btn w-full px-3 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-100 text-left flex items-center justify-between cursor-pointer">
+        <span class="text-[11px] font-bold">Inspect Casing: Swing Open / Close</span>
+        <span id="lbl-clamshell-pill" class="text-[10px] font-bold bg-black/30 px-1.5 py-0.5 rounded text-slate-300">SHUT</span>
+      </button>
+
+      <button id="btn-toggle-charger"
+        class="tactile-btn w-full px-3 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-100 text-left flex items-center justify-between cursor-pointer">
+        <span class="text-[11px] font-bold">Plug / Unplug Rear USB-C Charger</span>
+        <span id="lbl-charger-pill" class="text-[10px] font-bold bg-black/30 px-1.5 py-0.5 rounded text-emerald-300">CORD-FREE</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- Modular 3D Simulation Script -->
+  <script>
+    (function () {
+      'use strict';
+
+      /* =========================================================================
+       * 1. PHYSICAL DIMENSIONS, CONSTANTS & CAMERA PRESETS (1 unit = 1 meter)
+       * ========================================================================= */
+      const SPEC = {
+        ceilingH: 2.40,       // Exact 2.40m floor-to-ceiling height
+        poleRadius: 0.0225,   // Exact 45mm diameter steel stanchion
+        leverY: 1.80,         // Quick-release tension lever height
+        valY: 1.10,           // Ergonomic standing tap height
+        valW: 0.180,          // Exact 180mm casing width
+        valH: 0.320,          // Exact 320mm casing height
+        valD: 0.075,          // Exact 75mm casing depth
+        valBackZ: 0.036,      // Rear metal backplate Z plane in front of 45mm pole
+        cardW: 0.0856,        // ISO ID-1 85.6mm width
+        cardH: 0.0540,        // ISO ID-1 54.0mm height
+        cardT: 0.0015         // 1.5mm thickness
+      };
+
+      const COLORS = {
+        transitYellow: 0xf2b705,
+        transitTeal: 0x00897b,
+        matteBlack: 0x161a20,
+        darkRubber: 0x1e2229,
+        chrome: 0xdbe2ea,
+        copper: 0xd97706,
+        pcbGreen: 0x065f46
+      };
+
+      const CAMERA_PRESETS = {
+        eyeLevel: {
+          pos: new THREE.Vector3(0.0, 1.12, 0.72),
+          target: new THREE.Vector3(0.0, 1.10, 0.08)
+        },
+        fullPole: {
+          pos: new THREE.Vector3(1.15, 1.24, 2.35),
+          target: new THREE.Vector3(0.0, 1.18, 0.0)
+        },
+        rearPort: {
+          pos: new THREE.Vector3(0.18, 1.07, -0.52),
+          target: new THREE.Vector3(0.03, 1.06, 0.04)
+        },
+        hingedAccess: {
+          pos: new THREE.Vector3(0.36, 1.16, 0.56),
+          target: new THREE.Vector3(-0.02, 1.09, 0.08)
+        }
+      };
+
+      const SCREEN_STATE = {
+        IDLE: 'IDLE',
+        VALID_CONCESSION: 'VALID_CONCESSION',
+        VALID_ADULT: 'VALID_ADULT',
+        LOW_BALANCE: 'LOW_BALANCE',
+        ERRATIC_TAP: 'ERRATIC_TAP'
+      };
+
+      /* =========================================================================
+       * 2. EMBEDDED WEB AUDIO API SYNTHESIZER (100% Native Offline)
+       * ========================================================================= */
+      class ValidatorAudioEngine {
+        constructor() {
+          this.ctx = null;
+          this.muted = false;
+        }
+
+        ensureContext() {
+          if (this.muted) return null;
+          try {
+            if (!this.ctx) {
+              const AudioCtx = window.AudioContext || window.webkitAudioContext;
+              if (!AudioCtx) return null;
+              this.ctx = new AudioCtx();
+            }
+            if (this.ctx.state === 'suspended') this.ctx.resume();
+            return this.ctx;
+          } catch (err) {
+            console.warn('Web Audio API unavailable:', err);
+            return null;
+          }
+        }
+
+        toggleMute() {
+          this.muted = !this.muted;
+          return this.muted;
+        }
+
+        /** Standard Adult Card Tap: Single crisp 1,800Hz transit tone ("Beep!") <50ms attack */
+        playAdultBeep() {
+          const ctx = this.ensureContext();
+          if (!ctx) return;
+          const now = ctx.currentTime;
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(1800, now);
+
+          gain.gain.setValueAtTime(0.001, now);
+          gain.gain.linearRampToValueAtTime(0.20, now + 0.008);
+          gain.gain.setValueAtTime(0.20, now + 0.11);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.17);
+        }
+
+        /** Student Concession Card Tap: Dual-tone ascending chime ("Beep-Beep!" 1,500Hz -> 2,000Hz) */
+        playConcessionChime() {
+          const ctx = this.ensureContext();
+          if (!ctx) return;
+          const now = ctx.currentTime;
+
+          const tones = [
+            { freq: 1500, start: 0.0, dur: 0.095 },
+            { freq: 2000, start: 0.11, dur: 0.12 }
+          ];
+          tones.forEach(({ freq, start, dur }) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, now + start);
+
+            gain.gain.setValueAtTime(0.001, now + start);
+            gain.gain.linearRampToValueAtTime(0.20, now + start + 0.008);
+            gain.gain.setValueAtTime(0.20, now + start + dur - 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + start + dur);
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now + start);
+            osc.stop(now + start + dur + 0.02);
+          });
+        }
+
+        /** Insufficient Funds / Read Error: Descending square-wave buzzer (220Hz -> 180Hz) */
+        playErrorBuzzer() {
+          const ctx = this.ensureContext();
+          if (!ctx) return;
+          const now = ctx.currentTime;
+
+          const notes = [
+            { freq: 220, start: 0.0, dur: 0.18 },
+            { freq: 180, start: 0.22, dur: 0.24 }
+          ];
+          notes.forEach(({ freq, start, dur }) => {
+            const osc = ctx.createOscillator();
+            const lp = ctx.createBiquadFilter();
+            const gain = ctx.createGain();
+
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(freq, now + start);
+
+            lp.type = 'lowpass';
+            lp.frequency.value = 900;
+
+            gain.gain.setValueAtTime(0.001, now + start);
+            gain.gain.linearRampToValueAtTime(0.14, now + start + 0.01);
+            gain.gain.setValueAtTime(0.14, now + start + dur - 0.03);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + start + dur);
+
+            osc.connect(lp);
+            lp.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now + start);
+            osc.stop(now + start + dur + 0.02);
+          });
+        }
+
+        /** Soft tactile metallic/plastic click for clamshell latch, USB-C plug, or HUD buttons */
+        playMechanicalClick(pitch = 680) {
+          const ctx = this.ensureContext();
+          if (!ctx) return;
+          const now = ctx.currentTime;
+
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(pitch, now);
+          osc.frequency.exponentialRampToValueAtTime(pitch * 0.48, now + 0.045);
+
+          gain.gain.setValueAtTime(0.001, now);
+          gain.gain.linearRampToValueAtTime(0.13, now + 0.005);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.055);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.06);
+        }
+      }
+
+      /* =========================================================================
+       * 3. HIGH-RES PROCEDURAL CANVAS TEXTURES (Portrait Tablet, Tap Plate, Card)
+       * ========================================================================= */
+      const TextureFactory = {
+        /** Light Slate Architectural Training Room Floor Grid */
+        createFloorTexture() {
+          const c = document.createElement('canvas');
+          c.width = 1024; c.height = 1024;
+          const ctx = c.getContext('2d');
+          ctx.fillStyle = '#475569';
+          ctx.fillRect(0, 0, 1024, 1024);
+
+          ctx.strokeStyle = 'rgba(241, 245, 249, 0.14)';
+          ctx.lineWidth = 2;
+          for (let i = 0; i <= 1024; i += 128) {
+            ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 1024); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(1024, i); ctx.stroke();
+          }
+
+          const tex = new THREE.CanvasTexture(c);
+          tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+          tex.repeat.set(6, 6);
+          tex.anisotropy = 8;
+          return tex;
+        },
+
+        /** Yellow Tactile Safety Paving Strip */
+        createTactileTexture() {
+          const c = document.createElement('canvas');
+          c.width = 512; c.height = 128;
+          const ctx = c.getContext('2d');
+          ctx.fillStyle = '#eab308';
+          ctx.fillRect(0, 0, 512, 128);
+          for (let x = 16; x < 512; x += 32) {
+            for (let y = 16; y < 128; y += 32) {
+              ctx.fillStyle = '#a16207';
+              ctx.beginPath(); ctx.arc(x + 2, y + 2, 7, 0, Math.PI * 2); ctx.fill();
+              ctx.fillStyle = '#fef08a';
+              ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.fill();
+            }
+          }
+          const tex = new THREE.CanvasTexture(c);
+          tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+          tex.repeat.set(5, 1);
+          tex.anisotropy = 8;
+          return tex;
+        },
+
+        /** Lower Polycarbonate Tap Zone Faceplate: SimplyGo, EZ-Link, NETS & ((( • ))) */
+        createTapTargetTexture() {
+          const c = document.createElement('canvas');
+          c.width = 640; c.height = 380;
+          const ctx = c.getContext('2d');
+
+          // Deep teal-navy glossy polycarbonate backing
+          const grad = ctx.createLinearGradient(0, 0, 0, 380);
+          grad.addColorStop(0, '#00695c');
+          grad.addColorStop(1, '#004d40');
+          ctx.fillStyle = grad;
+          ctx.fillRect(0, 0, 640, 380);
+
+          // Crisp white rounded border
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.72)';
+          ctx.lineWidth = 8;
+          ctx.beginPath();
+          ctx.roundRect(14, 14, 612, 352, 28);
+          ctx.stroke();
+
+          // Top Brand Badges Row: SimplyGo | EZ-Link | NETS
+          const badges = [
+            { text: 'SimplyGo', bg: '#00897b', fg: '#ffffff', x: 46, w: 174 },
+            { text: 'EZ-Link',  bg: '#f59e0b', fg: '#0f172a', x: 236, w: 168 },
+            { text: 'NETS',     bg: '#1d4ed8', fg: '#ffffff', x: 420, w: 174 }
+          ];
+          badges.forEach((b) => {
+            ctx.fillStyle = b.bg;
+            ctx.beginPath();
+            ctx.roundRect(b.x, 38, b.w, 56, 12);
+            ctx.fill();
+            ctx.fillStyle = b.fg;
+            ctx.font = '800 28px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(b.text, b.x + b.w / 2, 76);
+          });
+
+          // Center Large White Contactless Wave Icon ((( • )))
+          const cx = 320, cy = 206;
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.14)';
+          ctx.beginPath(); ctx.arc(cx, cy, 86, 0, Math.PI * 2); ctx.fill();
+
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath(); ctx.arc(cx, cy, 14, 0, Math.PI * 2); ctx.fill();
+
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 10;
+          ctx.lineCap = 'round';
+          [34, 56, 78].forEach((r) => {
+            ctx.beginPath(); ctx.arc(cx, cy, r, -0.68, 0.68); ctx.stroke();
+            ctx.beginPath(); ctx.arc(cx, cy, r, Math.PI - 0.68, Math.PI + 0.68); ctx.stroke();
+          });
+
+          // Bottom Prompt Label
+          ctx.fillStyle = '#e0f2f1';
+          ctx.font = '800 30px Inter, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('TAP CARD HERE', 320, 338);
+
+          const tex = new THREE.CanvasTexture(c);
+          tex.anisotropy = 8;
+          return tex;
+        },
+
+        /** Rear Metal Backplate USB-C Charging Port Decal */
+        createRearUsbDecalTexture() {
+          const c = document.createElement('canvas');
+          c.width = 256; c.height = 128;
+          const ctx = c.getContext('2d');
+          ctx.fillStyle = '#1e242c';
+          ctx.fillRect(0, 0, 256, 128);
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.45)';
+          ctx.lineWidth = 4;
+          ctx.strokeRect(4, 4, 248, 120);
+
+          ctx.fillStyle = '#38bdf8';
+          ctx.font = '800 28px Inter, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('USB-C CHARGE', 128, 56);
+
+          ctx.fillStyle = '#cbd5e1';
+          ctx.font = '600 22px Inter, sans-serif';
+          ctx.fillText('5V / 3A  •  STAFF ONLY', 128, 96);
+
+          const tex = new THREE.CanvasTexture(c);
+          tex.anisotropy = 4;
+          return tex;
+        },
+
+        /** Singapore MOE Student Concession / SimplyGo EZ-Link Card Artwork (85.6mm x 54mm) */
+        createConcessionCardTexture() {
+          const c = document.createElement('canvas');
+          c.width = 512; c.height = 323;
+          const ctx = c.getContext('2d');
+
+          // Authentic Maroon-to-Teal Singapore MOE Student Concession aesthetic
+          const grad = ctx.createLinearGradient(0, 0, 512, 323);
+          grad.addColorStop(0, '#991b1b');
+          grad.addColorStop(0.55, '#b91c1c');
+          grad.addColorStop(1, '#00695c');
+          ctx.fillStyle = grad;
+          ctx.fillRect(0, 0, 512, 323);
+
+          // Decorative translucent swooshes
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.14)';
+          ctx.beginPath();
+          ctx.moveTo(0, 225);
+          ctx.bezierCurveTo(180, 155, 340, 285, 512, 160);
+          ctx.lineTo(512, 323);
+          ctx.lineTo(0, 323);
+          ctx.closePath();
+          ctx.fill();
+
+          // Top Brand Header
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '800 34px Inter, sans-serif';
+          ctx.fillText('SimplyGo', 28, 56);
+          ctx.fillStyle = '#fde047';
+          ctx.font = '800 20px Inter, sans-serif';
+          ctx.fillText('MOE STUDENT CONCESSION', 28, 86);
+
+          // Photo placeholder silhouette box (left)
+          ctx.fillStyle = '#f8fafc';
+          ctx.beginPath(); ctx.roundRect(28, 112, 108, 134, 10); ctx.fill();
+          ctx.fillStyle = '#94a3b8';
+          ctx.beginPath(); ctx.arc(82, 154, 22, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(82, 226, 38, Math.PI, Math.PI * 2); ctx.fill();
+
+          // Gold Contactless Chip + Wave Icon (right)
+          ctx.fillStyle = '#fbbf24';
+          ctx.beginPath(); ctx.roundRect(160, 128, 66, 50, 8); ctx.fill();
+          ctx.strokeStyle = '#92400e';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(172, 140, 42, 26);
+
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 5;
+          ctx.lineCap = 'round';
+          [16, 28, 40].forEach((r) => {
+            ctx.beginPath(); ctx.arc(432, 62, r, -0.65, 0.65); ctx.stroke();
+          });
+
+          // Cardholder & Serial Text
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '700 22px Inter, sans-serif';
+          ctx.fillText('STUDENT TRAINEE', 160, 214);
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+          ctx.font = '600 18px monospace';
+          ctx.fillText('8002 5910 3348 1109', 160, 246);
+
+          // Bottom EZ-Link badge
+          ctx.fillStyle = '#f59e0b';
+          ctx.beginPath(); ctx.roundRect(360, 266, 124, 34, 8); ctx.fill();
+          ctx.fillStyle = '#0f172a';
+          ctx.font = '900 18px Inter, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('EZ-LINK', 422, 290);
+
+          const tex = new THREE.CanvasTexture(c);
+          tex.anisotropy = 8;
+          return tex;
+        },
+
+        /** Create High-Res Portrait 8" Android Tablet Canvas (720 x 1280, exact 9:16) */
+        createTabletCanvas() {
+          const canvas = document.createElement('canvas');
+          canvas.width = 720;
+          canvas.height = 1280;
+          const texture = new THREE.CanvasTexture(canvas);
+          texture.anisotropy = 8;
+          return { canvas, ctx: canvas.getContext('2d'), texture };
+        },
+
+        /** Real-Time Renderer for Portrait 8" Android Tablet Kiosk Interface */
+        renderTabletDisplay(tabletObj, sim, timeSec) {
+          const { ctx, texture } = tabletObj;
+          const W = 720;
+          const H = 1280;
+
+          const isValid = sim.screenState === SCREEN_STATE.VALID_CONCESSION || sim.screenState === SCREEN_STATE.VALID_ADULT;
+          const isError = sim.screenState === SCREEN_STATE.LOW_BALANCE || sim.screenState === SCREEN_STATE.ERRATIC_TAP;
+          const isIdle = sim.screenState === SCREEN_STATE.IDLE;
+
+          const breath = 0.5 + 0.5 * Math.sin(timeSec * 3.6);
+          const pulseFast = Math.sin(timeSec * 14) > 0;
+
+          // Base Screen Canvas Background
+          ctx.fillStyle = '#0a1220';
+          ctx.fillRect(0, 0, W, H);
+
+          /* ---------------------------------------------------------------
+           * 0. SLIM TOP ANDROID KIOSK STATUS BAR (Y: 0 .. 58)
+           * --------------------------------------------------------------- */
+          ctx.fillStyle = '#050912';
+          ctx.fillRect(0, 0, W, 58);
+
+          ctx.fillStyle = '#e2e8f0';
+          ctx.font = '700 24px Inter, sans-serif';
+          ctx.textAlign = 'left';
+          ctx.fillText('08:42 AM', 24, 38);
+
+          // NFC Active Pill
+          ctx.fillStyle = '#064e3b';
+          ctx.beginPath(); ctx.roundRect(184, 13, 134, 32, 16); ctx.fill();
+          ctx.fillStyle = '#34d399';
+          ctx.font = '800 18px Inter, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('● NFC 13.56', 251, 35);
+
+          // Battery Indicator + Charging Lightning Bolt (⚡) when rear USB-C plugged in
+          const batText = sim.isCharging ? '⚡ 88%' : '88%';
+          ctx.textAlign = 'right';
+          ctx.fillStyle = sim.isCharging ? '#4ade80' : '#e2e8f0';
+          ctx.font = '800 24px Inter, sans-serif';
+          ctx.fillText(batText, 618, 38);
+
+          // Battery Icon Outline
+          ctx.strokeStyle = sim.isCharging ? '#4ade80' : '#cbd5e1';
+          ctx.lineWidth = 3;
+          ctx.strokeRect(632, 16, 56, 26);
+          ctx.fillStyle = sim.isCharging ? '#4ade80' : '#cbd5e1';
+          ctx.fillRect(688, 22, 6, 14);
+          ctx.fillStyle = sim.isCharging ? '#22c55e' : '#38bdf8';
+          ctx.fillRect(636, 20, 44, 18);
+
+          /* ---------------------------------------------------------------
+           * 1. TOP 18% — SOFTWARE-SIMULATED LED BANNER (Y: 58 .. 288)
+           * --------------------------------------------------------------- */
+          const ledTop = 58;
+          const ledH = 230;
+
+          if (isIdle) {
+            // Soft cyan/teal-green breathing glow
+            const grad = ctx.createLinearGradient(0, ledTop, W, ledTop + ledH);
+            grad.addColorStop(0, `rgba(6, 182, 212, ${0.42 + breath * 0.25})`);
+            grad.addColorStop(0.5, `rgba(16, 185, 129, ${0.52 + breath * 0.28})`);
+            grad.addColorStop(1, `rgba(6, 182, 212, ${0.42 + breath * 0.25})`);
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, ledTop, W, ledH);
+
+            // Simulated LED lightbar strip across very top
+            ctx.fillStyle = `rgba(103, 232, 249, ${0.65 + breath * 0.35})`;
+            ctx.fillRect(28, ledTop + 20, W - 56, 16);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '900 54px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(`${sim.mode} • TAP CARD`, W / 2, ledTop + 132);
+
+            ctx.fillStyle = '#ccfbf1';
+            ctx.font = '700 26px Inter, sans-serif';
+            ctx.fillText(
+              sim.mode === 'ENTRY' ? 'BOARDING VALIDATOR READY' : 'ALIGHTING VALIDATOR READY',
+              W / 2, ledTop + 184
+            );
+
+          } else if (isValid) {
+            // High-visibility emerald green pulsing banner + bold white checkmark (✔) + "CARD READ"
+            const gGlow = 0.78 + 0.22 * Math.sin(timeSec * 10);
+            ctx.fillStyle = `rgba(5, 150, 105, ${gGlow})`;
+            ctx.fillRect(0, ledTop, W, ledH);
+
+            ctx.fillStyle = '#6ee7b7';
+            ctx.fillRect(28, ledTop + 18, W - 56, 18);
+
+            // Bold White Checkmark Circle
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath(); ctx.arc(165, ledTop + 132, 54, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#059669';
+            ctx.font = '900 68px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('✔', 165, ledTop + 156);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '900 64px Inter, sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText('CARD READ', 246, ledTop + 152);
+
+          } else if (isError) {
+            // High-visibility signal red flashing strobe + bold white cross (✖) + "TAP AGAIN" / "LOW VALUE"
+            ctx.fillStyle = pulseFast ? '#dc2626' : '#7f1d1d';
+            ctx.fillRect(0, ledTop, W, ledH);
+
+            ctx.fillStyle = pulseFast ? '#fca5a5' : '#ef4444';
+            ctx.fillRect(28, ledTop + 18, W - 56, 18);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath(); ctx.arc(155, ledTop + 132, 54, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#dc2626';
+            ctx.font = '900 64px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('✖', 155, ledTop + 154);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '900 60px Inter, sans-serif';
+            ctx.textAlign = 'left';
+            const errTitle = sim.screenState === SCREEN_STATE.LOW_BALANCE ? 'LOW VALUE' : 'TAP AGAIN';
+            ctx.fillText(errTitle, 236, ledTop + 152);
+          }
+
+          /* ---------------------------------------------------------------
+           * 2. MIDDLE 55% — INFORMATION & JOURNEY GRAPHIC (Y: 288 .. 992)
+           * --------------------------------------------------------------- */
+          const midTop = 288;
+          ctx.fillStyle = '#0f172a';
+          ctx.fillRect(0, midTop, W, 704);
+
+          // Singapore Transit Header Card: "SimplyGo / SMRT • Service 166"
+          ctx.fillStyle = '#1e293b';
+          ctx.beginPath(); ctx.roundRect(32, midTop + 28, W - 64, 198, 26); ctx.fill();
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
+          ctx.lineWidth = 3;
+          ctx.stroke();
+
+          // Bus Service 166 Pill & Entry/Exit Pill
+          ctx.fillStyle = '#00897b';
+          ctx.beginPath(); ctx.roundRect(58, midTop + 52, 164, 48, 12); ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '900 26px Inter, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('BUS 166', 140, midTop + 85);
+
+          ctx.fillStyle = sim.mode === 'ENTRY' ? '#0284c7' : '#d97706';
+          ctx.beginPath(); ctx.roundRect(238, midTop + 52, 182, 48, 12); ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '800 22px Inter, sans-serif';
+          ctx.fillText(sim.mode === 'ENTRY' ? 'ENTRY DOOR' : 'EXIT DOOR', 329, midTop + 84);
+
+          ctx.textAlign = 'left';
+          ctx.fillStyle = '#94a3b8';
+          ctx.font = '700 22px Inter, sans-serif';
+          ctx.fillText('SimplyGo / SMRT • Service 166', 58, midTop + 142);
+
+          // Current Stop Anchor
+          ctx.fillStyle = '#f8fafc';
+          ctx.font = '800 32px Inter, sans-serif';
+          ctx.fillText('Ang Mo Kio Int → Towards Clementi', 58, midTop + 194);
+
+          // Dynamic Journey Fare & Balance Display Card
+          const cardY = midTop + 256;
+          const cardH = 416;
+
+          if (isIdle) {
+            ctx.fillStyle = '#132035';
+            ctx.beginPath(); ctx.roundRect(32, cardY, W - 64, cardH, 28); ctx.fill();
+            ctx.strokeStyle = 'rgba(45, 212, 191, 0.4)';
+            ctx.lineWidth = 4;
+            ctx.stroke();
+
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#2dd4bf';
+            ctx.font = '900 48px Inter, sans-serif';
+            ctx.fillText('Ready to Scan', W / 2, cardY + 130);
+
+            ctx.fillStyle = '#cbd5e1';
+            ctx.font = '600 28px Inter, sans-serif';
+            ctx.fillText('Place card flat on lower reader', W / 2, cardY + 188);
+
+            // Accepted Card Logos Pill
+            ctx.fillStyle = '#0f172a';
+            ctx.beginPath(); ctx.roundRect(76, cardY + 246, W - 152, 92, 20); ctx.fill();
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '800 28px Inter, sans-serif';
+            ctx.fillText('SimplyGo  •  EZ-Link  •  NETS', W / 2, cardY + 302);
+
+          } else if (isValid) {
+            const isConcession = sim.screenState === SCREEN_STATE.VALID_CONCESSION;
+            const fareStr = isConcession ? '-$0.45' : '-$0.92';
+            const badgeStr = isConcession ? 'STUDENT CONCESSION' : 'ADULT FARE CARD';
+
+            ctx.fillStyle = '#064e3b';
+            ctx.beginPath(); ctx.roundRect(32, cardY, W - 64, cardH, 28); ctx.fill();
+            ctx.strokeStyle = '#34d399';
+            ctx.lineWidth = 6;
+            ctx.stroke();
+
+            // Card Type Badge
+            ctx.fillStyle = isConcession ? '#f59e0b' : '#0284c7';
+            ctx.beginPath(); ctx.roundRect(140, cardY + 32, W - 280, 52, 26); ctx.fill();
+            ctx.fillStyle = isConcession ? '#0f172a' : '#ffffff';
+            ctx.font = '900 24px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(badgeStr, W / 2, cardY + 66);
+
+            // Fare Deducted
+            ctx.fillStyle = '#a7f3d0';
+            ctx.font = '700 28px Inter, sans-serif';
+            ctx.fillText(sim.mode === 'ENTRY' ? 'BOARDING FARE DEDUCTED' : 'ALIGHTING FARE ADJUSTED', W / 2, cardY + 138);
+
+            ctx.fillStyle = '#fde047';
+            ctx.font = '900 76px Inter, sans-serif';
+            ctx.fillText(`Fare: ${fareStr}`, W / 2, cardY + 224);
+
+            // Divider
+            ctx.strokeStyle = 'rgba(167, 243, 208, 0.3)';
+            ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.moveTo(80, cardY + 266); ctx.lineTo(W - 80, cardY + 266); ctx.stroke();
+
+            // Remaining Stored Value
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '800 44px Inter, sans-serif';
+            ctx.fillText('Card Balance: $14.20', W / 2, cardY + 344);
+
+          } else if (sim.screenState === SCREEN_STATE.LOW_BALANCE) {
+            ctx.fillStyle = '#450a0a';
+            ctx.beginPath(); ctx.roundRect(32, cardY, W - 64, cardH, 28); ctx.fill();
+            ctx.strokeStyle = '#ef4444';
+            ctx.lineWidth = 6;
+            ctx.stroke();
+
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#fca5a5';
+            ctx.font = '800 32px Inter, sans-serif';
+            ctx.fillText('INSUFFICIENT STORED VALUE', W / 2, cardY + 104);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '900 68px Inter, sans-serif';
+            ctx.fillText('LOW VALUE: $0.40', W / 2, cardY + 206);
+
+            ctx.fillStyle = '#fef08a';
+            ctx.font = '800 34px Inter, sans-serif';
+            ctx.fillText('Please Top Up at Kiosk', W / 2, cardY + 312);
+
+            ctx.fillStyle = '#fecaca';
+            ctx.font = '600 24px Inter, sans-serif';
+            ctx.fillText('Minimum $3.00 required to board', W / 2, cardY + 368);
+
+          } else if (sim.screenState === SCREEN_STATE.ERRATIC_TAP) {
+            ctx.fillStyle = '#450a0a';
+            ctx.beginPath(); ctx.roundRect(32, cardY, W - 64, cardH, 28); ctx.fill();
+            ctx.strokeStyle = '#f97316';
+            ctx.lineWidth = 6;
+            ctx.stroke();
+
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#fdba74';
+            ctx.font = '900 42px Inter, sans-serif';
+            ctx.fillText('CARD REMOVED TOO FAST', W / 2, cardY + 132);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '700 34px Inter, sans-serif';
+            ctx.fillText('Hold Card Flat for 0.3s', W / 2, cardY + 216);
+
+            ctx.fillStyle = '#fca5a5';
+            ctx.font = '700 26px Inter, sans-serif';
+            ctx.fillText('Contact duration < 80ms — Please tap again', W / 2, cardY + 312);
+          }
+
+          /* ---------------------------------------------------------------
+           * 3. BOTTOM 27% — ANIMATED DOWNWARDS CHEVRONS PROMPT (Y: 992 .. 1280)
+           * --------------------------------------------------------------- */
+          const botTop = 992;
+          ctx.fillStyle = '#070d18';
+          ctx.fillRect(0, botTop, W, H - botTop);
+
+          ctx.fillStyle = isError ? '#fca5a5' : '#5eead4';
+          ctx.font = '800 32px Inter, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('HOLD CARD FLAT BELOW', W / 2, botTop + 62);
+
+          // 3 Cascading Animated Downward Neon Chevrons
+          for (let i = 0; i < 3; i++) {
+            const wave = Math.sin(timeSec * 6.5 - i * 1.1);
+            const alpha = 0.25 + 0.75 * Math.max(0, wave);
+            const cy = botTop + 114 + i * 48;
+
+            ctx.strokeStyle = isError
+              ? `rgba(248, 113, 113, ${alpha})`
+              : `rgba(45, 212, 191, ${alpha})`;
+            ctx.lineWidth = 14;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.beginPath();
+            ctx.moveTo(W / 2 - 72, cy - 16);
+            ctx.lineTo(W / 2, cy + 20);
+            ctx.lineTo(W / 2 + 72, cy - 16);
+            ctx.stroke();
+          }
+
+          texture.needsUpdate = true;
+        }
+      };
+
+      /* =========================================================================
+       * 4. 3D SCENE & PORTABLE TENSION POLE VALIDATOR BUILDER
+       * ========================================================================= */
+      class PoleValidatorBuilder {
+        constructor(scene) {
+          this.scene = scene;
+          this.interactables = [];
+          this.refs = {};
+        }
+
+        registerInteractable(obj, actionId, tooltip) {
+          obj.traverse((c) => {
+            if (c.isMesh) {
+              c.userData.actionId = actionId;
+              c.userData.tooltip = tooltip;
+              this.interactables.push(c);
+            }
+          });
+        }
+
+        buildAll() {
+          this.buildLighting();
+          this.buildTrainingRoom();
+          this.buildTensionStanchionPole();
+          this.buildValidatorCasing();
+          this.buildRearUsbCChargingSystem();
+          this.buildConcessionCardAndClip();
+        }
+
+        buildLighting() {
+          const hemi = new THREE.HemisphereLight(0xf8fafc, 0x334155, 0.78);
+          hemi.position.set(0, 3.0, 0);
+          this.scene.add(hemi);
+
+          const ambient = new THREE.AmbientLight(0xe2e8f0, 0.28);
+          this.scene.add(ambient);
+
+          // Main front-right key light casting crisp soft shadows onto floor & pole
+          const keyLight = new THREE.DirectionalLight(0xffffff, 0.92);
+          keyLight.position.set(1.8, 2.35, 2.2);
+          keyLight.castShadow = true;
+          keyLight.shadow.mapSize.width = 2048;
+          keyLight.shadow.mapSize.height = 2048;
+          keyLight.shadow.camera.near = 0.2;
+          keyLight.shadow.camera.far = 10;
+          keyLight.shadow.camera.left = -2.2;
+          keyLight.shadow.camera.right = 2.2;
+          keyLight.shadow.camera.top = 2.8;
+          keyLight.shadow.camera.bottom = -0.5;
+          keyLight.shadow.bias = -0.0004;
+          this.scene.add(keyLight);
+
+          // Rear fill light so the Rear Charging Port Close-up view is brightly lit
+          const rearFill = new THREE.DirectionalLight(0xbae6fd, 0.62);
+          rearFill.position.set(-1.2, 1.8, -2.2);
+          this.scene.add(rearFill);
+
+          // Subtle front interior fill for hinged clamshell inspection
+          const frontFill = new THREE.PointLight(0xffffff, 0.38, 2.2);
+          frontFill.position.set(0.35, 1.25, 0.55);
+          this.scene.add(frontFill);
+        }
+
+        /** Bright Training Laboratory with Floor, Yellow Tactile Strip, Neutral Walls & 2.40m Ceiling */
+        buildTrainingRoom() {
+          // Light slate architectural floor (Y = 0)
+          const floor = new THREE.Mesh(
+            new THREE.PlaneGeometry(10, 10),
+            new THREE.MeshStandardMaterial({
+              map: TextureFactory.createFloorTexture(),
+              roughness: 0.76,
+              metalness: 0.08
+            })
+          );
+          floor.rotation.x = -Math.PI / 2;
+          floor.receiveShadow = true;
+          this.scene.add(floor);
+
+          // Yellow tactile safety strip in front of the stanchion
+          const tactile = new THREE.Mesh(
+            new THREE.BoxGeometry(3.2, 0.010, 0.34),
+            new THREE.MeshStandardMaterial({
+              map: TextureFactory.createTactileTexture(),
+              roughness: 0.68,
+              metalness: 0.05
+            })
+          );
+          tactile.position.set(0, 0.005, 0.68);
+          tactile.receiveShadow = true;
+          this.scene.add(tactile);
+
+          // Bright neutral classroom walls (far enough back for unobstructed 360° orbiting)
+          const wallMat = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, roughness: 0.88, metalness: 0.03 });
+          const backWall = new THREE.Mesh(new THREE.BoxGeometry(8.5, SPEC.ceilingH, 0.12), wallMat);
+          backWall.position.set(0, SPEC.ceilingH / 2, -2.5);
+          backWall.receiveShadow = true;
+          this.scene.add(backWall);
+
+          const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.12, SPEC.ceilingH, 7.5), wallMat);
+          leftWall.position.set(-3.2, SPEC.ceilingH / 2, 0.5);
+          leftWall.receiveShadow = true;
+          this.scene.add(leftWall);
+
+          // Baseboard skirting
+          const skirtMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.6 });
+          const backSkirt = new THREE.Mesh(new THREE.BoxGeometry(8.5, 0.10, 0.02), skirtMat);
+          backSkirt.position.set(0, 0.05, -2.43);
+          this.scene.add(backSkirt);
+
+          // Visible 2.40m Overhead Ceiling Slab with Soft Recessed LED Panels
+          const ceilingSlab = new THREE.Mesh(
+            new THREE.BoxGeometry(5.6, 0.12, 4.6),
+            new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.85, metalness: 0.05 })
+          );
+          ceilingSlab.position.set(0, SPEC.ceilingH + 0.06, -0.2);
+          ceilingSlab.receiveShadow = true;
+          this.scene.add(ceilingSlab);
+
+          // Recessed Overhead LED Light Panels
+          const ledMat = new THREE.MeshBasicMaterial({ color: 0xf8fafc });
+          [[-1.1, 0.3], [1.1, 0.3], [-1.1, -1.1], [1.1, -1.1]].forEach(([lx, lz]) => {
+            const panel = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.45), ledMat);
+            panel.rotation.x = Math.PI / 2;
+            panel.position.set(lx, SPEC.ceilingH - 0.002, lz);
+            this.scene.add(panel);
+          });
+        }
+
+        /** 45mm Yellow Powder-Coated Floor-to-Ceiling Tension Stanchion Pole (Zero Floor Anchors/Wiring) */
+        buildTensionStanchionPole() {
+          const poleGroup = new THREE.Group();
+          this.scene.add(poleGroup);
+
+          const yellowMat = new THREE.MeshStandardMaterial({
+            color: COLORS.transitYellow,
+            roughness: 0.32,
+            metalness: 0.28
+          });
+          const chromeMat = new THREE.MeshStandardMaterial({
+            color: COLORS.chrome,
+            roughness: 0.18,
+            metalness: 0.88
+          });
+          const rubberMat = new THREE.MeshStandardMaterial({
+            color: COLORS.darkRubber,
+            roughness: 0.92,
+            metalness: 0.04
+          });
+          const anodizedMat = new THREE.MeshStandardMaterial({
+            color: 0x1e293b,
+            roughness: 0.35,
+            metalness: 0.72
+          });
+
+          // Main 45mm Vertical Steel Tube (Y = 0.036 .. 2.364)
+          const tubeLen = SPEC.ceilingH - 0.072;
+          const tube = new THREE.Mesh(
+            new THREE.CylinderGeometry(SPEC.poleRadius, SPEC.poleRadius, tubeLen, 32),
+            yellowMat
+          );
+          tube.position.y = SPEC.ceilingH / 2;
+          tube.castShadow = true;
+          tube.receiveShadow = true;
+          poleGroup.add(tube);
+
+          // Brushed Chrome Tension Collars (near floor & ceiling)
+          [0.085, SPEC.ceilingH - 0.085].forEach((cy) => {
+            const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.055, 28), chromeMat);
+            collar.position.y = cy;
+            collar.castShadow = true;
+            poleGroup.add(collar);
+          });
+
+          // Heavy-Duty Non-Slip Textured Dark Charcoal Rubber Compression Pads (Top & Bottom)
+          const createCompressionPad = (yPos, isTop) => {
+            const padGroup = new THREE.Group();
+            padGroup.position.y = yPos;
+
+            // Main compression disc
+            const disc = new THREE.Mesh(
+              new THREE.CylinderGeometry(isTop ? 0.068 : 0.058, isTop ? 0.058 : 0.070, 0.028, 32),
+              rubberMat
+            );
+            disc.castShadow = true;
+            disc.receiveShadow = true;
+            padGroup.add(disc);
+
+            // Chrome spring-loaded pressure cup collar
+            const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.022, 24), chromeMat);
+            cup.position.y = isTop ? -0.022 : 0.022;
+            padGroup.add(cup);
+
+            return padGroup;
+          };
+
+          poleGroup.add(createCompressionPad(0.014, false));                 // Bottom floor pad (Y = 0)
+          poleGroup.add(createCompressionPad(SPEC.ceilingH - 0.014, true));  // Top ceiling pad (Y = 2.40)
+
+          // Anodized Quick-Release Tension Lever Assembly at Y = 1.80m
+          const leverGroup = new THREE.Group();
+          leverGroup.position.set(0, SPEC.leverY, 0);
+
+          const clampRing = new THREE.Mesh(new THREE.CylinderGeometry(0.031, 0.031, 0.052, 28), anodizedMat);
+          clampRing.castShadow = true;
+          leverGroup.add(clampRing);
+
+          const pivotLug = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.024, 0.022), chromeMat);
+          pivotLug.position.set(0.034, 0, 0);
+          leverGroup.add(pivotLug);
+
+          const camLever = new THREE.Mesh(
+            new THREE.BoxGeometry(0.016, 0.088, 0.018),
+            new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.32, metalness: 0.6 })
+          );
+          camLever.position.set(0.044, -0.036, 0);
+          camLever.rotation.z = 0.16;
+          camLever.castShadow = true;
+          leverGroup.add(camLever);
+
+          poleGroup.add(leverGroup);
+        }
+
+        /**
+         * Validator Casing (180mm W x 320mm H x 75mm D) at Y = 1.10m
+         * - Heavy-duty rear split-ring pole clamp
+         * - Matte-black rounded impact bumper body with open interior tray
+         * - Strict Portrait 8" Android tablet inside upper bay (NO physical external LED bar)
+         * - Hinged Front Teal Clamshell Bezel (left piano hinge, right knurled thumb screw)
+         * - Lower polycarbonate tap target + internal copper 13.56MHz NFC coil & OTG cable
+         */
+        buildValidatorCasing() {
+          const valGroup = new THREE.Group();
+          valGroup.position.set(0, SPEC.valY, 0);
+          this.scene.add(valGroup);
+
+          const bumperMat = new THREE.MeshStandardMaterial({ color: COLORS.matteBlack, roughness: 0.55, metalness: 0.22 });
+          const metalBackMat = new THREE.MeshStandardMaterial({ color: 0x262d37, roughness: 0.42, metalness: 0.72 });
+          const tealMat = new THREE.MeshStandardMaterial({ color: COLORS.transitTeal, roughness: 0.30, metalness: 0.16 });
+          const chromeMat = new THREE.MeshStandardMaterial({ color: COLORS.chrome, roughness: 0.22, metalness: 0.85 });
+          const copperMat = new THREE.MeshStandardMaterial({ color: COLORS.copper, roughness: 0.28, metalness: 0.88 });
+          const pcbMat = new THREE.MeshStandardMaterial({ color: COLORS.pcbGreen, roughness: 0.45, metalness: 0.25 });
+
+          /* --- A. Heavy-Duty Rear Split-Ring Pole Clamp gripping the 45mm Stanchion --- */
+          [-0.085, 0.085].forEach((cy) => {
+            // Split ring clamp collar around pole (X=0, Z=0)
+            const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.028, 28), metalBackMat);
+            ring.position.set(0, cy, 0);
+            ring.castShadow = true;
+            valGroup.add(ring);
+
+            // Standoff neck joining clamp to rear metal backplate
+            const neck = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.026, 0.024), metalBackMat);
+            neck.position.set(0, cy, 0.026);
+            valGroup.add(neck);
+
+            // Stainless hex clamp bolts on rear sides of ring
+            [-0.036, 0.036].forEach((bx) => {
+              const bolt = new THREE.Mesh(new THREE.CylinderGeometry(0.0045, 0.0045, 0.022, 6), chromeMat);
+              bolt.rotation.x = Math.PI / 2;
+              bolt.position.set(bx, cy, -0.008);
+              valGroup.add(bolt);
+            });
+          });
+
+          /* --- B. Matte-Black Main Rear Housing & Open Interior Cavity (Z = 0.036 .. 0.095) --- */
+          const bodyDepth = 0.059;
+          const bodyCenterZ = SPEC.valBackZ + bodyDepth / 2;
+
+          // Rear Metal Backplate
+          const backplate = new THREE.Mesh(
+            new THREE.BoxGeometry(SPEC.valW - 0.008, SPEC.valH - 0.008, 0.008),
+            metalBackMat
+          );
+          backplate.position.set(0, 0, SPEC.valBackZ + 0.004);
+          backplate.castShadow = true;
+          backplate.receiveShadow = true;
+          valGroup.add(backplate);
+
+          // Matte-Black Impact-Resistant Perimeter Bumper Walls (leaving interior hollow!)
+          const wallT = 0.012;
+          const topWall = new THREE.Mesh(new THREE.BoxGeometry(SPEC.valW, wallT, bodyDepth), bumperMat);
+          topWall.position.set(0, SPEC.valH / 2 - wallT / 2, bodyCenterZ);
+          const botWall = new THREE.Mesh(new THREE.BoxGeometry(SPEC.valW, wallT, bodyDepth), bumperMat);
+          botWall.position.set(0, -SPEC.valH / 2 + wallT / 2, bodyCenterZ);
+          const leftWall = new THREE.Mesh(new THREE.BoxGeometry(wallT, SPEC.valH, bodyDepth), bumperMat);
+          leftWall.position.set(-SPEC.valW / 2 + wallT / 2, 0, bodyCenterZ);
+          const rightWall = new THREE.Mesh(new THREE.BoxGeometry(wallT, SPEC.valH, bodyDepth), bumperMat);
+          rightWall.position.set(SPEC.valW / 2 - wallT / 2, 0, bodyCenterZ);
+          [topWall, botWall, leftWall, rightWall].forEach((w) => {
+            w.castShadow = true;
+            w.receiveShadow = true;
+            valGroup.add(w);
+          });
+
+          /* --- C. INTERIOR HARDWARE (Revealed when Front Clamshell Swings Open 90°) --- */
+          // 1. Matte-Black Aluminum Tablet Mounting Tray inside upper cavity
+          const trayMesh = new THREE.Mesh(new THREE.BoxGeometry(0.146, 0.205, 0.008), metalBackMat);
+          trayMesh.position.set(0, 0.042, SPEC.valBackZ + 0.040);
+          valGroup.add(trayMesh);
+
+          // Retention Corner Clips gripping the 8" Android tablet
+          [[-0.068, 0.138], [0.068, 0.138], [-0.068, -0.054], [0.068, -0.054]].forEach(([cx, cy]) => {
+            const clip = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.014, 0.014), chromeMat);
+            clip.position.set(cx, cy, SPEC.valBackZ + 0.047);
+            valGroup.add(clip);
+          });
+
+          // 2. Strict Portrait 8-Inch Android Tablet (9:16 vertical aspect: 0.104m W x 0.185m H)
+          const tabletBody = new THREE.Mesh(new THREE.BoxGeometry(0.122, 0.198, 0.009), bumperMat);
+          tabletBody.position.set(0, 0.042, SPEC.valBackZ + 0.050);
+          valGroup.add(tabletBody);
+
+          const tabletCanvas = TextureFactory.createTabletCanvas();
+          const tabletScreen = new THREE.Mesh(
+            new THREE.PlaneGeometry(0.104, 0.185),
+            new THREE.MeshBasicMaterial({ map: tabletCanvas.texture })
+          );
+          tabletScreen.position.set(0, 0.042, SPEC.valBackZ + 0.0555);
+          valGroup.add(tabletScreen);
+          this.refs.tabletCanvas = tabletCanvas;
+
+          // 3. Lower Interior: Angled USB-C OTG Jumper Cable + 13.56MHz NFC PCB & Copper Coil
+          const nfcPcb = new THREE.Mesh(new THREE.BoxGeometry(0.115, 0.068, 0.004), pcbMat);
+          nfcPcb.position.set(0, -0.104, SPEC.valBackZ + 0.036);
+          valGroup.add(nfcPcb);
+
+          // Copper-Wound Rectangular Spiral 13.56MHz NFC Antenna Coil (concentric copper loops)
+          [0, 1, 2, 3].forEach((loop) => {
+            const lw = 0.094 - loop * 0.011;
+            const lh = 0.052 - loop * 0.008;
+            const topC = new THREE.Mesh(new THREE.BoxGeometry(lw, 0.0022, 0.0025), copperMat);
+            topC.position.set(0, -0.104 + lh / 2, SPEC.valBackZ + 0.039);
+            const botC = new THREE.Mesh(new THREE.BoxGeometry(lw, 0.0022, 0.0025), copperMat);
+            botC.position.set(0, -0.104 - lh / 2, SPEC.valBackZ + 0.039);
+            const leftC = new THREE.Mesh(new THREE.BoxGeometry(0.0022, lh, 0.0025), copperMat);
+            leftC.position.set(-lw / 2, -0.104, SPEC.valBackZ + 0.039);
+            const rightC = new THREE.Mesh(new THREE.BoxGeometry(0.0022, lh, 0.0025), copperMat);
+            rightC.position.set(lw / 2, -0.104, SPEC.valBackZ + 0.039);
+            valGroup.add(topC, botC, leftC, rightC);
+          });
+
+          // Microchip IC in center of NFC PCB
+          const chip = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.016, 0.004), bumperMat);
+          chip.position.set(0, -0.104, SPEC.valBackZ + 0.039);
+          valGroup.add(chip);
+
+          // Angled USB-C OTG Jumper Cable connecting bottom of Android tablet to NFC PCB
+          const otgCurve = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(0.0, -0.056, SPEC.valBackZ + 0.050),
+            new THREE.Vector3(0.024, -0.068, SPEC.valBackZ + 0.048),
+            new THREE.Vector3(0.032, -0.088, SPEC.valBackZ + 0.042),
+            new THREE.Vector3(0.016, -0.102, SPEC.valBackZ + 0.038)
+          ]);
+          const otgCable = new THREE.Mesh(
+            new THREE.TubeGeometry(otgCurve, 18, 0.0028, 8, false),
+            new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.7 })
+          );
+          valGroup.add(otgCable);
+
+          // Subtle Internal Battery Cell Pack visible below the tray
+          const usbPlugHead = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.014, 0.008), chromeMat);
+          usbPlugHead.position.set(0, -0.060, SPEC.valBackZ + 0.050);
+          valGroup.add(usbPlugHead);
+
+          /* --- D. LEFT-SIDE PIANO HINGE & TOOL-LESS FRONT TEAL CLAMSHELL DOOR --- */
+          const doorPivotZ = SPEC.valBackZ + bodyDepth; // +0.095m
+          const hingePivot = new THREE.Group();
+          hingePivot.position.set(-SPEC.valW / 2, 0, doorPivotZ);
+          valGroup.add(hingePivot);
+
+          // Discrete Left-Side Metallic Piano Hinge Barrels
+          for (let h = 0; h < 9; h++) {
+            const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.0045, 0.0045, 0.024, 12), chromeMat);
+            barrel.position.set(-0.002, -0.12 + h * 0.030, 0);
+            hingePivot.add(barrel);
+          }
+
+          // Front Teal Clamshell Bezel built with an ACTUAL rectangular window cutout for the 8" portrait screen
+          // Door local X runs from 0 (left hinge) to +0.180 (right latch edge), center at X = +0.090
+          const doorShape = new THREE.Shape();
+          const dw = SPEC.valW;
+          const dh = SPEC.valH;
+          const r = 0.012;
+          doorShape.moveTo(r, -dh / 2);
+          doorShape.lineTo(dw - r, -dh / 2);
+          doorShape.absarc(dw - r, -dh / 2 + r, r, -Math.PI / 2, 0, false);
+          doorShape.lineTo(dw, dh / 2 - r);
+          doorShape.absarc(dw - r, dh / 2 - r, r, 0, Math.PI / 2, false);
+          doorShape.lineTo(r, dh / 2);
+          doorShape.absarc(r, dh / 2 - r, r, Math.PI / 2, Math.PI, false);
+          doorShape.lineTo(0, -dh / 2 + r);
+          doorShape.absarc(r, -dh / 2 + r, r, Math.PI, Math.PI * 1.5, false);
+
+          // Portrait Screen Window Cutout (centered at X = 0.090, Y = +0.042, size 0.104 x 0.185)
+          const winHole = new THREE.Path();
+          const wx1 = 0.090 - 0.052, wx2 = 0.090 + 0.052;
+          const wy1 = 0.042 - 0.0925, wy2 = 0.042 + 0.0925;
+          winHole.moveTo(wx1, wy1);
+          winHole.lineTo(wx2, wy1);
+          winHole.lineTo(wx2, wy2);
+          winHole.lineTo(wx1, wy2);
+          winHole.closePath();
+          doorShape.holes.push(winHole);
+
+          const doorGeo = new THREE.ExtrudeGeometry(doorShape, {
+            depth: 0.014,
+            bevelEnabled: true,
+            bevelThickness: 0.002,
+            bevelSize: 0.002,
+            bevelSegments: 2
+          });
+          const tealDoorMesh = new THREE.Mesh(doorGeo, tealMat);
+          tealDoorMesh.castShadow = true;
+          tealDoorMesh.receiveShadow = true;
+          hingePivot.add(tealDoorMesh);
+
+          // Lower Polycarbonate Tap Target Plate mounted directly below portrait screen on the front door
+          const tapPlateMesh = new THREE.Mesh(
+            new THREE.PlaneGeometry(0.144, 0.084),
+            new THREE.MeshStandardMaterial({
+              map: TextureFactory.createTapTargetTexture(),
+              roughness: 0.20,
+              metalness: 0.08
+            })
+          );
+          tapPlateMesh.position.set(0.090, -0.104, 0.0168);
+          hingePivot.add(tapPlateMesh);
+
+          // Right-Side Knurled Thumb Screw / Tool-less Magnetic Catch
+          const latchGroup = new THREE.Group();
+          latchGroup.position.set(SPEC.valW + 0.006, 0.0, 0.006);
+
+          const thumbScrew = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.014, 20), chromeMat);
+          thumbScrew.rotation.z = Math.PI / 2;
+          latchGroup.add(thumbScrew);
+
+          const latchTab = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.028, 0.016), bumperMat);
+          latchTab.position.x = -0.005;
+          latchGroup.add(latchTab);
+
+          hingePivot.add(latchGroup);
+
+          this.refs.clamshell = {
+            hingePivot,
+            isOpen: false,
+            openAngle: 0
+          };
+
+          this.registerInteractable(tapPlateMesh, 'tapCard', 'Contactless Tap Zone — Click to Tap Concession Card');
+          this.registerInteractable(latchGroup, 'toggleClamshell', 'Tool-less Thumb Latch — Click to Swing Casing Open / Closed');
+        }
+
+        /** Flush Rear USB-C Charging Port + Pivoting Dust Plug + Animated Braided Charging Cable */
+        buildRearUsbCChargingSystem() {
+          const rearPortGroup = new THREE.Group();
+          // Mounted on Rear Metal Backplate (Z = SPEC.valBackZ = +0.036, facing -Z)
+          // Offset to X = +0.052, Y = 1.04 so it sits cleanly beside the central pole clamp
+          rearPortGroup.position.set(0.052, SPEC.valY - 0.055, SPEC.valBackZ);
+          this.scene.add(rearPortGroup);
+
+          const chromeMat = new THREE.MeshStandardMaterial({ color: COLORS.chrome, roughness: 0.2, metalness: 0.88 });
+          const darkMat = new THREE.MeshStandardMaterial({ color: 0x0b0e14, roughness: 0.6 });
+          const siliconeMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.85, metalness: 0.05 });
+
+          // Subtle "USB-C CHARGE 5V/3A" Rear Backplate Decal
+          const decal = new THREE.Mesh(
+            new THREE.PlaneGeometry(0.056, 0.028),
+            new THREE.MeshBasicMaterial({ map: TextureFactory.createRearUsbDecalTexture() })
+          );
+          decal.rotation.y = Math.PI;
+          decal.position.set(0, 0.024, -0.001);
+          rearPortGroup.add(decal);
+
+          // Flush Female USB-C Metallic Socket Bezel
+          const socketFrame = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.0085, 0.004), chromeMat);
+          socketFrame.position.set(0, 0, -0.001);
+          rearPortGroup.add(socketFrame);
+
+          const socketSlot = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.0048, 0.005), darkMat);
+          socketSlot.position.set(0, 0, -0.0015);
+          rearPortGroup.add(socketSlot);
+
+          // Removable Protective Silicone Dust Plug (pivots open when charger plugs in)
+          const plugPivot = new THREE.Group();
+          plugPivot.position.set(0.013, 0, -0.003);
+          const plugCap = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.011, 0.004), siliconeMat);
+          plugCap.position.set(-0.013, 0, 0);
+          const plugTether = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.004, 0.003), siliconeMat);
+          plugTether.position.set(-0.002, 0, 0);
+          plugPivot.add(plugCap, plugTether);
+          rearPortGroup.add(plugPivot);
+
+          // Animated Braided USB-C Charging Cable (hidden when cord-free, slides in when plugged)
+          const cableGroup = new THREE.Group();
+          const boot = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.009, 0.028), darkMat);
+          boot.position.set(0, 0, -0.016);
+          const metalTip = new THREE.Mesh(new THREE.BoxGeometry(0.010, 0.0045, 0.010), chromeMat);
+          metalTip.position.set(0, 0, -0.001);
+          const ledRing = new THREE.Mesh(
+            new THREE.BoxGeometry(0.015, 0.010, 0.004),
+            new THREE.MeshStandardMaterial({ color: 0x22c55e, emissive: 0x22c55e, emissiveIntensity: 1.8 })
+          );
+          ledRing.position.set(0, 0, -0.022);
+          cableGroup.add(boot, metalTip, ledRing);
+
+          // Braided Cable Curve draping gracefully down behind the stanchion toward a wall outlet
+          const cordCurve = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(0, 0, -0.030),
+            new THREE.Vector3(0.015, -0.04, -0.095),
+            new THREE.Vector3(0.055, -0.28, -0.14),
+            new THREE.Vector3(0.11, -0.72, -0.24),
+            new THREE.Vector3(0.24, -1.02, -0.45)
+          ]);
+          const cordMesh = new THREE.Mesh(
+            new THREE.TubeGeometry(cordCurve, 32, 0.0036, 10, false),
+            new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.78, metalness: 0.15 })
+          );
+          cordMesh.castShadow = true;
+          cableGroup.add(cordMesh);
+
+          cableGroup.visible = false;
+          cableGroup.position.z = -0.10;
+          rearPortGroup.add(cableGroup);
+
+          // Invisible generous raycast hitbox over the rear USB-C port
+          const hitBox = new THREE.Mesh(
+            new THREE.BoxGeometry(0.07, 0.06, 0.03),
+            new THREE.MeshBasicMaterial({ visible: false })
+          );
+          rearPortGroup.add(hitBox);
+
+          this.refs.rearUsb = {
+            plugPivot,
+            cableGroup,
+            progress: 0 // 0 = unplugged (cord-free), 1 = plugged in
+          };
+
+          this.registerInteractable(rearPortGroup, 'toggleCharger', 'Flush Rear USB-C Port — Click to Plug / Unplug Charger');
+        }
+
+        /** Realistic 3D Singapore MOE Student Concession Card (85.6mm x 54mm) & Magnetic Pole Clip */
+        buildConcessionCardAndClip() {
+          const clipMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.45, metalness: 0.6 });
+          const chromeMat = new THREE.MeshStandardMaterial({ color: COLORS.chrome, roughness: 0.25, metalness: 0.85 });
+
+          // Small Magnetic Card Holder Clip mounted on the yellow pole at Y = 0.84m
+          const clipGroup = new THREE.Group();
+          clipGroup.position.set(0, 0.84, 0);
+
+          const clipRing = new THREE.Mesh(new THREE.CylinderGeometry(0.027, 0.027, 0.022, 24), clipMat);
+          clipGroup.add(clipRing);
+
+          const clipArm = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.016, 0.014), clipMat);
+          clipArm.position.set(-0.048, 0, 0.022);
+          clipGroup.add(clipArm);
+
+          const magnetDisc = new THREE.Mesh(new THREE.CylinderGeometry(0.010, 0.010, 0.006, 16), chromeMat);
+          magnetDisc.rotation.x = Math.PI / 2;
+          magnetDisc.position.set(-0.078, 0, 0.031);
+          clipGroup.add(magnetDisc);
+          this.scene.add(clipGroup);
+
+          // 3D Singapore MOE Student Concession Card (85.6mm x 54mm x 1.5mm)
+          const cardTopMat = new THREE.MeshStandardMaterial({
+            map: TextureFactory.createConcessionCardTexture(),
+            roughness: 0.26,
+            metalness: 0.14
+          });
+          const cardEdgeMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.4 });
+          const cardGeo = new THREE.BoxGeometry(SPEC.cardW, SPEC.cardH, SPEC.cardT);
+          const cardMesh = new THREE.Mesh(cardGeo, [
+            cardEdgeMat, cardEdgeMat,
+            cardEdgeMat, cardEdgeMat,
+            cardTopMat, cardTopMat
+          ]);
+          cardMesh.castShadow = true;
+
+          // Rest Pose on Magnetic Pole Clip
+          const restPos = new THREE.Vector3(-0.078, 0.84, 0.037);
+          const restRot = new THREE.Euler(0, 0.12, -0.05);
+
+          // Flush Tap Pose against Lower Polycarbonate [TAP] Zone (Y = 1.10 - 0.104 = 0.996, Z = 0.118)
+          const tapPos = new THREE.Vector3(0.0, SPEC.valY - 0.104, 0.122);
+          const tapRot = new THREE.Euler(0, 0, 0);
+
+          cardMesh.position.copy(restPos);
+          cardMesh.rotation.copy(restRot);
+          this.scene.add(cardMesh);
+
+          this.refs.card = {
+            mesh: cardMesh,
+            restPos,
+            restRot,
+            tapPos,
+            tapRot
+          };
+
+          this.registerInteractable(cardMesh, 'tapCard', 'MOE Student Concession Card — Click to Tap on Validator');
+        }
+      }
+
+      /* =========================================================================
+       * 5. SMOOTH CUBIC EASE-IN-OUT CAMERA CONTROLLER
+       * ========================================================================= */
+      class CameraController {
+        constructor(camera, controls) {
+          this.camera = camera;
+          this.controls = controls;
+          this.tween = null;
+          this.controls.addEventListener('start', () => { this.tween = null; });
+        }
+
+        flyTo(presetKey, duration = 880) {
+          const p = CAMERA_PRESETS[presetKey];
+          if (!p) return;
+          this.tween = {
+            startPos: this.camera.position.clone(),
+            endPos: p.pos.clone(),
+            startTarget: this.controls.target.clone(),
+            endTarget: p.target.clone(),
+            startTime: performance.now(),
+            duration
+          };
+        }
+
+        update(now) {
+          if (this.tween) {
+            const elapsed = now - this.tween.startTime;
+            let t = Math.min(1, elapsed / this.tween.duration);
+            t = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+            this.camera.position.lerpVectors(this.tween.startPos, this.tween.endPos, t);
+            this.controls.target.lerpVectors(this.tween.startTarget, this.tween.endTarget, t);
+
+            if (elapsed >= this.tween.duration) this.tween = null;
+          }
+          this.controls.update();
+        }
+      }
+
+      /* =========================================================================
+       * 6. MAIN MODULE 4 SIMULATION CONTROLLER
+       * ========================================================================= */
+      class PoleCardReaderApp {
+        constructor() {
+          this.container = document.getElementById('canvas-container');
+          this.tooltip = document.getElementById('hover-tooltip');
+          this.audio = new ValidatorAudioEngine();
+          this.raycaster = new THREE.Raycaster();
+          this.pointer = new THREE.Vector2();
+          this.downPos = { x: 0, y: 0 };
+          this.toastTimer = null;
+          this.resetScreenTimer = null;
+
+          // Simulation State
+          this.sim = {
+            mode: 'ENTRY', // 'ENTRY' | 'EXIT'
+            screenState: SCREEN_STATE.IDLE,
+            isCharging: false,
+            clamshellOpen: false,
+            tapAnim: null
+          };
+
+          this.initThree();
+          this.builder = new PoleValidatorBuilder(this.scene);
+          this.builder.buildAll();
+
+          this.camCtrl = new CameraController(this.camera, this.controls);
+
+          this.bindHUD();
+          this.bindRaycasting();
+          this.onResize();
+        }
+
+        initThree() {
+          this.scene = new THREE.Scene();
+          this.scene.background = new THREE.Color(0x162032);
+          this.scene.fog = new THREE.FogExp2(0x162032, 0.065);
+
+          const w = this.container.clientWidth || window.innerWidth;
+          const h = this.container.clientHeight || window.innerHeight;
+
+          this.camera = new THREE.PerspectiveCamera(42, w / h, 0.03, 40);
+          this.camera.position.copy(CAMERA_PRESETS.eyeLevel.pos);
+
+          this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+          this.renderer.setSize(w, h);
+          this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+          this.renderer.shadowMap.enabled = true;
+          this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+          this.renderer.outputEncoding = THREE.sRGBEncoding;
+          this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+          this.renderer.toneMappingExposure = 1.08;
+          this.container.appendChild(this.renderer.domElement);
+
+          this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
+          this.controls.enableDamping = true;
+          this.controls.dampingFactor = 0.07;
+          this.controls.minDistance = 0.34;
+          this.controls.maxDistance = 5.2;
+          this.controls.maxPolarAngle = Math.PI / 2 - 0.01;
+          this.controls.target.copy(CAMERA_PRESETS.eyeLevel.target);
+          this.controls.update();
+        }
+
+        /* ---------------- Interactive Actions ---------------- */
+
+        /** Launches 3D Card Tapping Physics & Triggers Validator Response */
+        triggerCardTap(outcomeState) {
+          // Close clamshell automatically if open so tap plate is aligned cleanly
+          if (this.sim.clamshellOpen) {
+            this.toggleClamshell(false);
+          }
+
+          const isErratic = outcomeState === SCREEN_STATE.ERRATIC_TAP;
+
+          this.sim.tapAnim = {
+            startTime: performance.now(),
+            approachDur: isErratic ? 220 : 340,
+            holdDur: isErratic ? 65 : 300, // <80ms for erratic tap vs 300ms flush hold for valid
+            retractDur: isErratic ? 180 : 360,
+            triggered: false,
+            outcomeState,
+            isErratic
+          };
+        }
+
+        onCardContactRead(outcomeState) {
+          this.sim.screenState = outcomeState;
+
+          if (outcomeState === SCREEN_STATE.VALID_CONCESSION) {
+            this.audio.playConcessionChime();
+            this.showToast('Concession Card Read! Fare: -$0.45 • Balance: $14.20', 'bg-emerald-400');
+          } else if (outcomeState === SCREEN_STATE.VALID_ADULT) {
+            this.audio.playAdultBeep();
+            this.showToast('Adult Card Read! Fare: -$0.92 • Balance: $14.20', 'bg-teal-400');
+          } else if (outcomeState === SCREEN_STATE.LOW_BALANCE) {
+            this.audio.playErrorBuzzer();
+            this.showToast('Low Balance Error ($0.40) — Please Top Up at Kiosk', 'bg-rose-500');
+          } else if (outcomeState === SCREEN_STATE.ERRATIC_TAP) {
+            this.audio.playErrorBuzzer();
+            this.showToast('Erratic Tap (<80ms) — Card Removed Too Fast! Tap Again', 'bg-amber-400');
+          }
+
+          // Return tablet cleanly to Idle breathing banner after 3.6 seconds
+          if (this.resetScreenTimer) clearTimeout(this.resetScreenTimer);
+          this.resetScreenTimer = setTimeout(() => {
+            this.sim.screenState = SCREEN_STATE.IDLE;
+          }, 3600);
+        }
+
+        toggleEntryExitMode() {
+          this.audio.playMechanicalClick(840);
+          this.sim.mode = this.sim.mode === 'ENTRY' ? 'EXIT' : 'ENTRY';
+          document.getElementById('lbl-mode-pill').textContent = this.sim.mode;
+          document.getElementById('mode-badge-text').textContent =
+            this.sim.mode === 'ENTRY' ? 'Mode: ENTRY (Boarding)' : 'Mode: EXIT (Alighting)';
+          this.showToast(`Validator Switched to ${this.sim.mode} Mode`, 'bg-sky-400');
+        }
+
+        toggleClamshell(forceState = null) {
+          const next = forceState !== null ? forceState : !this.sim.clamshellOpen;
+          this.sim.clamshellOpen = next;
+          this.builder.refs.clamshell.isOpen = next;
+          this.audio.playMechanicalClick(next ? 620 : 480);
+
+          const pill = document.getElementById('lbl-clamshell-pill');
+          pill.textContent = next ? 'OPEN' : 'SHUT';
+          pill.className = next
+            ? 'text-[10px] font-bold bg-emerald-500/25 px-1.5 py-0.5 rounded text-emerald-300'
+            : 'text-[10px] font-bold bg-black/30 px-1.5 py-0.5 rounded text-slate-300';
+
+          this.showToast(
+            next ? 'Clamshell Swung Open 90° — Inspecting Tablet Tray & Copper NFC Coil' : 'Front Teal Bezel Latched Shut',
+            next ? 'bg-teal-400' : 'bg-slate-400'
+          );
+        }
+
+        toggleRearCharger() {
+          this.sim.isCharging = !this.sim.isCharging;
+          this.audio.playMechanicalClick(this.sim.isCharging ? 920 : 540);
+
+          const dot = document.getElementById('power-badge-dot');
+          const txt = document.getElementById('power-badge-text');
+          const pill = document.getElementById('lbl-charger-pill');
+
+          if (this.sim.isCharging) {
+            dot.className = 'inline-block w-2 h-2 rounded-full bg-amber-400 shrink-0';
+            txt.className = 'font-semibold text-amber-300 truncate';
+            txt.textContent = 'Charging via Rear USB-C ⚡ (88%)';
+            pill.textContent = 'CHARGING ⚡';
+            pill.className = 'text-[10px] font-bold bg-amber-500/25 px-1.5 py-0.5 rounded text-amber-300';
+            this.showToast('Rear USB-C Charger Plugged In — Tablet Battery Charging ⚡', 'bg-amber-400');
+          } else {
+            dot.className = 'inline-block w-2 h-2 rounded-full bg-emerald-400 shrink-0';
+            txt.className = 'font-semibold text-emerald-300 truncate';
+            txt.textContent = 'Cord-Free Battery (88%)';
+            pill.textContent = 'CORD-FREE';
+            pill.className = 'text-[10px] font-bold bg-black/30 px-1.5 py-0.5 rounded text-emerald-300';
+            this.showToast('Rear USB-C Unplugged — 100% Cord-Free Battery Mode', 'bg-emerald-400');
+          }
+        }
+
+        switchCameraView(viewKey) {
+          this.camCtrl.flyTo(viewKey);
+
+          // Convenience: automatically open clamshell when clicking "Hinged Access View"
+          if (viewKey === 'hingedAccess' && !this.sim.clamshellOpen) {
+            this.toggleClamshell(true);
+          }
+
+          document.querySelectorAll('.cam-btn').forEach((b) => {
+            const active = b.dataset.view === viewKey;
+            b.className = active
+              ? 'cam-btn px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer bg-[#00897B] text-white shadow-sm'
+              : 'cam-btn px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer text-slate-200 hover:bg-slate-700/60';
+          });
+        }
+
+        showToast(msg, dotClass = 'bg-teal-400') {
+          const toast = document.getElementById('status-toast');
+          document.getElementById('toast-text').textContent = msg;
+          document.getElementById('toast-dot').className = `w-2.5 h-2.5 rounded-full ${dotClass} shrink-0`;
+
+          toast.classList.remove('opacity-0', '-translate-y-2');
+          toast.classList.add('opacity-100', 'translate-y-0');
+
+          if (this.toastTimer) clearTimeout(this.toastTimer);
+          this.toastTimer = setTimeout(() => {
+            toast.classList.remove('opacity-100', 'translate-y-0');
+            toast.classList.add('opacity-0', '-translate-y-2');
+          }, 3200);
+        }
+
+        /* ---------------- Event Bindings ---------------- */
+
+        bindHUD() {
+          // 4 Camera Preset Buttons
+          document.querySelectorAll('.cam-btn').forEach((btn) => {
+            btn.addEventListener('click', () => {
+              this.audio.playMechanicalClick(760);
+              this.switchCameraView(btn.dataset.view);
+            });
+          });
+
+          // Teacher Control HUD Buttons
+          document.getElementById('btn-tap-concession').addEventListener('click', () =>
+            this.triggerCardTap(SCREEN_STATE.VALID_CONCESSION));
+          document.getElementById('btn-tap-adult').addEventListener('click', () =>
+            this.triggerCardTap(SCREEN_STATE.VALID_ADULT));
+          document.getElementById('btn-tap-erratic').addEventListener('click', () =>
+            this.triggerCardTap(SCREEN_STATE.ERRATIC_TAP));
+          document.getElementById('btn-tap-lowbal').addEventListener('click', () =>
+            this.triggerCardTap(SCREEN_STATE.LOW_BALANCE));
+          document.getElementById('btn-toggle-mode').addEventListener('click', () =>
+            this.toggleEntryExitMode());
+          document.getElementById('btn-toggle-clamshell').addEventListener('click', () =>
+            this.toggleClamshell());
+          document.getElementById('btn-toggle-charger').addEventListener('click', () =>
+            this.toggleRearCharger());
+
+          // Collapsible Teacher HUD toggle (helpful on mobile)
+          const bodyEl = document.getElementById('teacher-hud-body');
+          const iconEl = document.getElementById('icon-collapse');
+          document.getElementById('btn-collapse-hud').addEventListener('click', () => {
+            const hidden = bodyEl.classList.toggle('hidden');
+            iconEl.style.transform = hidden ? 'rotate(180deg)' : 'rotate(0deg)';
+          });
+
+          // Audio Mute Toggle
+          document.getElementById('btn-audio').addEventListener('click', () => {
+            const muted = this.audio.toggleMute();
+            document.getElementById('icon-audio-on').classList.toggle('hidden', muted);
+            document.getElementById('icon-audio-off').classList.toggle('hidden', !muted);
+            this.showToast(muted ? 'Audio Muted' : 'Audio Enabled', muted ? 'bg-rose-400' : 'bg-teal-400');
+          });
+
+          window.addEventListener('resize', () => this.onResize());
+        }
+
+        bindRaycasting() {
+          const dom = this.renderer.domElement;
+
+          dom.addEventListener('pointerdown', (e) => {
+            this.downPos = { x: e.clientX, y: e.clientY };
+          });
+
+          dom.addEventListener('pointermove', (e) => {
+            const rect = dom.getBoundingClientRect();
+            this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+            this.raycaster.setFromCamera(this.pointer, this.camera);
+            const hits = this.raycaster.intersectObjects(this.builder.interactables, false);
+
+            if (hits.length > 0) {
+              dom.style.cursor = 'pointer';
+              this.tooltip.textContent = hits[0].object.userData.tooltip;
+              this.tooltip.style.left = `${e.clientX}px`;
+              this.tooltip.style.top = `${e.clientY}px`;
+              this.tooltip.style.opacity = '1';
+            } else {
+              dom.style.cursor = 'grab';
+              this.tooltip.style.opacity = '0';
+            }
+          });
+
+          dom.addEventListener('pointerleave', () => {
+            this.tooltip.style.opacity = '0';
+          });
+
+          dom.addEventListener('pointerup', (e) => {
+            if (Math.hypot(e.clientX - this.downPos.x, e.clientY - this.downPos.y) > 6) return;
+
+            const rect = dom.getBoundingClientRect();
+            this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+            this.raycaster.setFromCamera(this.pointer, this.camera);
+            const hits = this.raycaster.intersectObjects(this.builder.interactables, false);
+            if (hits.length === 0) return;
+
+            const action = hits[0].object.userData.actionId;
+            if (action === 'tapCard') {
+              this.triggerCardTap(SCREEN_STATE.VALID_CONCESSION);
+            } else if (action === 'toggleClamshell') {
+              this.toggleClamshell();
+            } else if (action === 'toggleCharger') {
+              this.toggleRearCharger();
+            }
+          });
+        }
+
+        onResize() {
+          const w = this.container.clientWidth || window.innerWidth;
+          const h = this.container.clientHeight || window.innerHeight;
+          this.camera.aspect = w / h;
+          this.camera.updateProjectionMatrix();
+          this.renderer.setSize(w, h);
+        }
+
+        /* ---------------- Real-Time Mechanical & Card Tapping Animations ---------------- */
+
+        updateAnimations(dt, now) {
+          // 1. Smooth Hinged Front Clamshell Bezel Swing (0° to -90° around left piano hinge)
+          const cs = this.builder.refs.clamshell;
+          const targetAngle = cs.isOpen ? -Math.PI / 2 : 0;
+          cs.openAngle += (targetAngle - cs.openAngle) * Math.min(1, dt * 7.5);
+          cs.hingePivot.rotation.y = cs.openAngle;
+
+          // 2. Rear USB-C Dust Plug Pivot & Braided Charger Cable Insertion
+          const usb = this.builder.refs.rearUsb;
+          const targetUsb = this.sim.isCharging ? 1 : 0;
+          usb.progress += (targetUsb - usb.progress) * Math.min(1, dt * 8.0);
+          usb.plugPivot.rotation.y = usb.progress * 1.95; // Dust plug swings open cleanly
+          usb.cableGroup.visible = usb.progress > 0.03;
+          usb.cableGroup.position.z = THREE.MathUtils.lerp(-0.095, 0.0, usb.progress);
+
+          // 3. 3D Concession Card Tapping Physics (Approach -> Hold -> Retract)
+          const anim = this.sim.tapAnim;
+          if (anim) {
+            const card = this.builder.refs.card;
+            const elapsed = now - anim.startTime;
+            const t1 = anim.approachDur;
+            const t2 = t1 + anim.holdDur;
+            const t3 = t2 + anim.retractDur;
+
+            if (elapsed < t1) {
+              // Smoothly lift off pole clip and arc toward lower polycarbonate tap zone
+              let u = elapsed / t1;
+              u = u * u * (3 - 2 * u);
+              card.mesh.position.lerpVectors(card.restPos, card.tapPos, u);
+              card.mesh.position.z += Math.sin(u * Math.PI) * 0.065;
+              card.mesh.rotation.set(
+                THREE.MathUtils.lerp(card.restRot.x, card.tapRot.x, u),
+                THREE.MathUtils.lerp(card.restRot.y, card.tapRot.y, u),
+                THREE.MathUtils.lerp(card.restRot.z, card.tapRot.z, u)
+              );
+            } else if (elapsed < t2) {
+              // Held flush against [TAP] zone
+              card.mesh.position.copy(card.tapPos);
+              card.mesh.rotation.copy(card.tapRot);
+              if (!anim.triggered) {
+                anim.triggered = true;
+                this.onCardContactRead(anim.outcomeState);
+              }
+            } else if (elapsed < t3) {
+              // Smoothly retract (or jerk away prematurely if Erratic Tap)
+              let u = (elapsed - t2) / anim.retractDur;
+              u = anim.isErratic ? Math.pow(u, 0.65) : u * u * (3 - 2 * u);
+              card.mesh.position.lerpVectors(card.tapPos, card.restPos, u);
+              card.mesh.position.z += Math.sin(u * Math.PI) * (anim.isErratic ? 0.11 : 0.05);
+              card.mesh.rotation.set(
+                THREE.MathUtils.lerp(card.tapRot.x, card.restRot.x, u),
+                THREE.MathUtils.lerp(card.tapRot.y, card.restRot.y, u),
+                THREE.MathUtils.lerp(card.tapRot.z, card.restRot.z, u)
+              );
+            } else {
+              card.mesh.position.copy(card.restPos);
+              card.mesh.rotation.copy(card.restRot);
+              this.sim.tapAnim = null;
+            }
+          }
+        }
+
+        start() {
+          let lastTime = performance.now();
+          let lastCanvasTick = 0;
+
+          const animate = (now) => {
+            requestAnimationFrame(animate);
+            const dt = Math.min(0.05, (now - lastTime) / 1000);
+            lastTime = now;
+            const timeSec = now * 0.001;
+
+            this.camCtrl.update(now);
+            this.updateAnimations(dt, now);
+
+            // Refresh high-res 720x1280 portrait Android tablet display smoothly (~24 FPS)
+            if (now - lastCanvasTick > 40) {
+              TextureFactory.renderTabletDisplay(this.builder.refs.tabletCanvas, this.sim, timeSec);
+              lastCanvasTick = now;
+            }
+
+            this.renderer.render(this.scene, this.camera);
+          };
+          requestAnimationFrame(animate);
+        }
+      }
+
+      /* =========================================================================
+       * 7. BOOTSTRAP ON WINDOW LOAD
+       * ========================================================================= */
+      window.onload = function () {
+        try {
+          const app = new PoleCardReaderApp();
+          app.start();
+        } catch (err) {
+          console.error('Failed to initialize Module 4 Pole Card Reader Simulation:', err);
+        }
+      };
+    })();
+  </script>
+</body>
+</html>

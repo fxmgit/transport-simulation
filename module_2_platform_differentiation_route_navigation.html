@@ -1,0 +1,1867 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Module 2: Platform Differentiation &amp; Interactive Route Navigation — 3D Training Lab</title>
+
+  <!-- Google Fonts (Inter) & Tailwind CSS CDN -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Three.js (r128) & OrbitControls CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #0f172a;
+      color: #f8fafc;
+      user-select: none;
+    }
+
+    #canvas-container {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 1;
+    }
+
+    #canvas-container canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      outline: none;
+    }
+
+    /* Glassmorphism HUD Surfaces */
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.78);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      box-shadow: 0 12px 34px -8px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+
+    /* Physical Matte-Dark 2.4GHz RF Handheld Clicker Aesthetic */
+    .rf-remote-body {
+      background: linear-gradient(160deg, #272e3a 0%, #161b24 60%, #0f131a 100%);
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      box-shadow:
+        0 20px 40px -10px rgba(0, 0, 0, 0.75),
+        inset 0 1px 1px rgba(255, 255, 255, 0.14),
+        inset 0 -3px 6px rgba(0, 0, 0, 0.65);
+    }
+
+    .rf-btn {
+      box-shadow:
+        0 3px 0 rgba(0, 0, 0, 0.55),
+        inset 0 1px 0 rgba(255, 255, 255, 0.15);
+      transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.15s ease;
+    }
+
+    .rf-btn:active {
+      transform: translateY(2px);
+      box-shadow:
+        0 1px 0 rgba(0, 0, 0, 0.65),
+        inset 0 1px 2px rgba(0, 0, 0, 0.4);
+    }
+
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    /* Hover Tooltip for Interactive 3D Map Stations */
+    #station-tooltip {
+      position: fixed;
+      z-index: 35;
+      pointer-events: none;
+      transform: translate(-50%, -140%);
+      transition: opacity 0.12s ease;
+    }
+
+    /* Blinking RF Transmit LED */
+    @keyframes rfBlink {
+      0% { opacity: 1; box-shadow: 0 0 10px #38bdf8, 0 0 18px #10b981; }
+      50% { opacity: 0.25; box-shadow: none; }
+      100% { opacity: 1; box-shadow: 0 0 10px #38bdf8, 0 0 18px #10b981; }
+    }
+    .rf-led-tx {
+      background-color: #38bdf8 !important;
+      animation: rfBlink 0.18s linear 3;
+    }
+  </style>
+</head>
+<body>
+  <!-- Full-Viewport 3D WebGL Canvas -->
+  <div id="canvas-container" aria-label="Module 2 Platform Differentiation 3D Training Laboratory"></div>
+
+  <!-- 3D Station Hover Tooltip -->
+  <div id="station-tooltip" class="glass-panel rounded-xl px-3 py-1.5 text-xs font-semibold text-white opacity-0 whitespace-nowrap border-emerald-400/50">
+    NS9 Woodlands
+  </div>
+
+  <!-- Top HUD: Module Branding, Audio Toggle & 4 Camera Preset Buttons -->
+  <header class="fixed top-3 left-3 right-3 z-20 pointer-events-none flex flex-col xl:flex-row xl:items-center xl:justify-between gap-2.5">
+    <!-- Branding & Audio Mute -->
+    <div class="glass-panel pointer-events-auto rounded-2xl px-4 py-2.5 flex items-center justify-between gap-4">
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-[#d42e12] to-[#8c1d0b] flex items-center justify-center border border-red-400/40 shadow-inner shrink-0">
+          <span class="text-xs font-extrabold tracking-tight text-white">NSL</span>
+        </div>
+        <div class="min-w-0">
+          <h1 class="text-sm sm:text-base font-bold tracking-tight text-white truncate">
+            Module 2: Platform Differentiation &amp; Route Navigation
+          </h1>
+          <div class="flex items-center gap-2 text-[11px] text-slate-300">
+            <span class="inline-block w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span class="truncate">Ang Mo Kio (NS16) Training Wall &bull; Click any station on the 48&quot; map</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Audio Mute/Unmute Toggle -->
+      <div class="flex items-center gap-1.5 shrink-0">
+        <button id="btn-audio" title="Mute / Unmute Audio"
+          class="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-emerald-300 border border-slate-600/40 transition-colors cursor-pointer">
+          <svg id="icon-audio-on" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M11 5L6 9H2v6h4l5 4V5z" />
+            <path d="M15.54 8.46a5 5 0 010 7.07M19.07 4.93a10 10 0 010 14.14" stroke-linecap="round" />
+          </svg>
+          <svg id="icon-audio-off" class="w-4 h-4 hidden text-rose-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M11 5L6 9H2v6h4l5 4V5z" />
+            <path d="M23 9l-6 6M17 9l6 6" stroke-linecap="round" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- 4 Quick-View Camera Preset Buttons -->
+    <nav class="glass-panel pointer-events-auto rounded-2xl p-1.5 flex items-center gap-1 overflow-x-auto no-scrollbar" aria-label="Camera Presets">
+      <button data-view="front" class="cam-btn px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer bg-[#d42e12] text-white shadow-sm">
+        Front Elevation View
+      </button>
+      <button data-view="map" class="cam-btn px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer text-slate-200 hover:bg-slate-700/60">
+        Focus: Interactive Map
+      </button>
+      <button data-view="pids" class="cam-btn px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer text-slate-200 hover:bg-slate-700/60">
+        Focus: Overhead Platform TVs
+      </button>
+      <button data-view="cutaway" class="cam-btn px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer text-slate-200 hover:bg-slate-700/60">
+        Side Technical Cutaway
+      </button>
+    </nav>
+  </header>
+
+  <!-- Floating Status Toast -->
+  <div id="status-toast" class="fixed top-28 sm:top-24 left-1/2 -translate-x-1/2 z-30 glass-panel rounded-2xl px-4 py-2 text-xs sm:text-sm font-medium text-white flex items-center gap-2.5 transition-all duration-300 opacity-0 -translate-y-2 pointer-events-none border-emerald-400/40">
+    <span id="toast-dot" class="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0"></span>
+    <span id="toast-text">System Ready</span>
+  </div>
+
+  <!-- Floating "Teacher Pocket Remote" (2.4GHz RF Handheld Clicker Widget) -->
+  <aside id="teacher-remote" class="fixed right-3 top-1/2 -translate-y-1/2 z-25 w-52 sm:w-56 rf-remote-body rounded-3xl p-3.5 transition-transform duration-300">
+    <!-- Remote Header & Blinking RF LED -->
+    <div class="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-700/70">
+      <div>
+        <div class="text-[10px] font-bold uppercase tracking-widest text-slate-400">2.4GHz RF Clicker</div>
+        <div class="text-xs font-bold text-white">Teacher Pocket Remote</div>
+      </div>
+      <div class="flex flex-col items-end gap-1">
+        <span id="rf-led" class="w-2.5 h-2.5 rounded-full bg-emerald-500/50 border border-emerald-300/40 transition-colors" title="RF Transmit Indicator"></span>
+        <span class="text-[9px] font-mono text-slate-400">TX</span>
+      </div>
+    </div>
+
+    <!-- Physical-Style Tactile Buttons -->
+    <div class="flex flex-col gap-2">
+      <button id="rf-btn-arr"
+        class="rf-btn w-full px-3 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-left flex items-center justify-between cursor-pointer">
+        <div>
+          <div class="text-[11px] font-bold leading-tight">Trigger Train Arrival</div>
+          <div class="text-[10px] text-emerald-100/80">Force &ldquo;Arr / Arriving Now&rdquo;</div>
+        </div>
+        <span class="px-1.5 py-0.5 rounded bg-black/25 font-mono text-[10px] font-bold">Arr</span>
+      </button>
+
+      <button id="rf-btn-doors"
+        class="rf-btn w-full px-3 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-left flex items-center justify-between cursor-pointer">
+        <div>
+          <div class="text-[11px] font-bold leading-tight">Door-Closing Chime</div>
+          <div class="text-[10px] text-rose-100/80">Alert Tone + Red Flasher</div>
+        </div>
+        <span class="w-2.5 h-2.5 rounded-full bg-rose-200 animate-pulse"></span>
+      </button>
+
+      <button id="rf-btn-delay"
+        class="rf-btn w-full px-3 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-left flex items-center justify-between cursor-pointer">
+        <div>
+          <div class="text-[11px] font-bold leading-tight">Simulate Delay Notice</div>
+          <div class="text-[10px] text-amber-950/80">Amber Service Advisory</div>
+        </div>
+        <span class="text-xs font-extrabold">!</span>
+      </button>
+
+      <button id="rf-btn-reset"
+        class="rf-btn w-full px-3 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-100 text-center text-[11px] font-bold mt-0.5 cursor-pointer">
+        Reset All Displays
+      </button>
+    </div>
+
+    <!-- Remote Footer Grip Detail -->
+    <div class="mt-3 pt-2 border-t border-slate-800 flex items-center justify-between text-[9px] text-slate-500 font-mono">
+      <span>CH: NSL-02</span>
+      <span>MINI-PC LINKED</span>
+    </div>
+  </aside>
+
+  <!-- Bottom Student Quick-Action HUD Pills -->
+  <footer class="fixed bottom-3 left-3 right-3 z-20 pointer-events-none flex justify-center">
+    <div class="glass-panel pointer-events-auto rounded-2xl p-2 flex flex-wrap sm:flex-nowrap items-center justify-center gap-2 max-w-full">
+      <div class="hidden md:flex items-center gap-2 px-2 text-xs text-slate-300">
+        <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+        <span>Origin: <strong class="text-white">Ang Mo Kio (NS16)</strong></span>
+      </div>
+
+      <div class="hidden md:block w-px h-6 bg-slate-700"></div>
+
+      <button id="btn-select-woodlands"
+        class="px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 bg-emerald-600/90 hover:bg-emerald-500 text-white border border-emerald-400/40 shadow-sm transition-all cursor-pointer active:scale-95">
+        <span class="px-1.5 py-0.5 rounded bg-black/25 text-[10px]">NS9</span>
+        <span>Select Woodlands (Northbound &rarr; Platform A)</span>
+      </button>
+
+      <button id="btn-select-orchard"
+        class="px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 bg-sky-600/90 hover:bg-sky-500 text-white border border-sky-400/40 shadow-sm transition-all cursor-pointer active:scale-95">
+        <span class="px-1.5 py-0.5 rounded bg-black/25 text-[10px]">NS22</span>
+        <span>Select Orchard (Southbound &rarr; Platform B)</span>
+      </button>
+    </div>
+  </footer>
+
+  <!-- Modular 3D Application Script -->
+  <script>
+    (function () {
+      'use strict';
+
+      /* =========================================================================
+       * 1. SINGAPORE MRT NORTH-SOUTH LINE (NSL) DATA & CAMERA PRESETS
+       * ========================================================================= */
+      const NSL_STATIONS = [
+        { code: 'NS1',  name: 'Jurong East' },
+        { code: 'NS2',  name: 'Bukit Batok' },
+        { code: 'NS4',  name: 'Choa Chu Kang' },
+        { code: 'NS5',  name: 'Yew Tee' },
+        { code: 'NS7',  name: 'Kranji' },
+        { code: 'NS8',  name: 'Marsiling' },
+        { code: 'NS9',  name: 'Woodlands', targetBadge: 'NORTHBOUND TARGET' },
+        { code: 'NS10', name: 'Admiralty' },
+        { code: 'NS11', name: 'Sembawang' },
+        { code: 'NS12', name: 'Canberra' },
+        { code: 'NS13', name: 'Yishun' },
+        { code: 'NS14', name: 'Khatib' },
+        { code: 'NS15', name: 'Yio Chu Kang' },
+        { code: 'NS16', name: 'Ang Mo Kio', isOrigin: true },
+        { code: 'NS17', name: 'Bishan' },
+        { code: 'NS18', name: 'Braddell' },
+        { code: 'NS19', name: 'Toa Payoh' },
+        { code: 'NS20', name: 'Novena' },
+        { code: 'NS21', name: 'Newton' },
+        { code: 'NS22', name: 'Orchard', targetBadge: 'SOUTHBOUND TARGET' },
+        { code: 'NS23', name: 'Somerset' },
+        { code: 'NS24', name: 'Dhoby Ghaut' },
+        { code: 'NS25', name: 'City Hall' },
+        { code: 'NS26', name: 'Raffles Place' },
+        { code: 'NS27', name: 'Marina Bay' },
+        { code: 'NS28', name: 'Marina South Pier' }
+      ];
+
+      const ORIGIN_INDEX = 13; // NS16 Ang Mo Kio
+
+      // Compute clean dual-tier serpentine coordinates on the 2048x1152 touchscreen canvas
+      // Row 0 (indices 0..12): Left -> Right at y = 415
+      // Right U-Turn curve connects index 12 (Yio Chu Kang) to index 13 (Ang Mo Kio)
+      // Row 1 (indices 13..25): Right -> Left at y = 780
+      const MAP_W = 2048;
+      const MAP_H = 1152;
+      const ROW_TOP_Y = 415;
+      const ROW_BOT_Y = 780;
+      const X_LEFT = 155;
+      const X_RIGHT = 1835;
+      const U_RADIUS = (ROW_BOT_Y - ROW_TOP_Y) / 2; // 182.5
+
+      NSL_STATIONS.forEach((st, idx) => {
+        if (idx <= 12) {
+          const t = idx / 12;
+          st.x = X_LEFT + t * (X_RIGHT - X_LEFT);
+          st.y = ROW_TOP_Y;
+          st.row = 0;
+        } else {
+          const t = (idx - 13) / 12;
+          st.x = X_RIGHT - t * (X_RIGHT - X_LEFT);
+          st.y = ROW_BOT_Y;
+          st.row = 1;
+        }
+        st.index = idx;
+      });
+
+      // Physical 3D Wall & Screen Dimensions (1 unit = 1 meter)
+      const DIM = {
+        wallW: 3.8,
+        wallH: 2.85,
+        wallThick: 0.14,
+        // Upper 32" TVs (16:9 widescreen, 150mm gap)
+        tv32W: 0.73,
+        tv32H: 0.42,
+        tv32Gap: 0.15,
+        tv32Y: 1.88,
+        tv32Z: 0.042, // Front of VESA mount standoff
+        // Lower 48" Interactive Touchscreen (16:9 widescreen, 65mm rear cavity standoff)
+        tv48W: 1.09,
+        tv48H: 0.63,
+        tv48Y: 1.00,
+        tv48Standoff: 0.065,
+        tv48Depth: 0.048
+      };
+
+      const CAMERA_PRESETS = {
+        front: {
+          pos: new THREE.Vector3(0.0, 1.48, 2.85),
+          target: new THREE.Vector3(0.0, 1.42, 0.0)
+        },
+        map: {
+          pos: new THREE.Vector3(0.0, 1.01, 1.24),
+          target: new THREE.Vector3(0.0, 1.00, 0.09)
+        },
+        pids: {
+          pos: new THREE.Vector3(0.0, 1.88, 1.56),
+          target: new THREE.Vector3(0.0, 1.88, 0.04)
+        },
+        cutaway: {
+          pos: new THREE.Vector3(1.42, 1.16, 0.56),
+          target: new THREE.Vector3(0.04, 1.12, 0.03)
+        }
+      };
+
+      /* =========================================================================
+       * 2. WEB AUDIO API SYNTHESIZER (100% Native, Zero External Audio Files)
+       * ========================================================================= */
+      class TransitAudioEngine {
+        constructor() {
+          this.ctx = null;
+          this.muted = false;
+        }
+
+        ensureContext() {
+          if (this.muted) return null;
+          try {
+            if (!this.ctx) {
+              const AudioCtx = window.AudioContext || window.webkitAudioContext;
+              if (!AudioCtx) return null;
+              this.ctx = new AudioCtx();
+            }
+            if (this.ctx.state === 'suspended') {
+              this.ctx.resume();
+            }
+            return this.ctx;
+          } catch (err) {
+            console.warn('Web Audio API unavailable:', err);
+            return null;
+          }
+        }
+
+        toggleMute() {
+          this.muted = !this.muted;
+          return this.muted;
+        }
+
+        /** Crisp touchscreen UI confirmation touch tone */
+        playTouchConfirm() {
+          const ctx = this.ensureContext();
+          if (!ctx) return;
+          const now = ctx.currentTime;
+
+          const notes = [
+            { freq: 1046.5, start: 0, dur: 0.075 },
+            { freq: 1396.9, start: 0.055, dur: 0.11 }
+          ];
+          notes.forEach(({ freq, start, dur }) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, now + start);
+            gain.gain.setValueAtTime(0.001, now + start);
+            gain.gain.linearRampToValueAtTime(0.14, now + start + 0.01);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + start + dur);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now + start);
+            osc.stop(now + start + dur + 0.02);
+          });
+        }
+
+        /** Subtle tactile click for UI / RF remote buttons */
+        playClick(freq = 860) {
+          const ctx = this.ensureContext();
+          if (!ctx) return;
+          const now = ctx.currentTime;
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, now);
+          gain.gain.setValueAtTime(0.001, now);
+          gain.gain.linearRampToValueAtTime(0.1, now + 0.006);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.055);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.065);
+        }
+
+        /** Authentic 3-tone transit arrival chime (High -> Mid -> Low) */
+        playArrivalChime() {
+          const ctx = this.ensureContext();
+          if (!ctx) return;
+          const now = ctx.currentTime;
+          const tones = [
+            { freq: 1046.50, start: 0.0, dur: 0.34 },  // C6 (High)
+            { freq: 880.00,  start: 0.24, dur: 0.34 }, // A5 (Mid)
+            { freq: 659.25,  start: 0.48, dur: 0.58 }  // E5 (Low)
+          ];
+          tones.forEach(({ freq, start, dur }) => {
+            const osc = ctx.createOscillator();
+            const overtone = ctx.createOscillator();
+            const gain = ctx.createGain();
+
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, now + start);
+            overtone.type = 'triangle';
+            overtone.frequency.setValueAtTime(freq * 2, now + start);
+
+            const overGain = ctx.createGain();
+            overGain.gain.value = 0.14;
+
+            gain.gain.setValueAtTime(0.001, now + start);
+            gain.gain.linearRampToValueAtTime(0.17, now + start + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + start + dur);
+
+            osc.connect(gain);
+            overtone.connect(overGain);
+            overGain.connect(gain);
+            gain.connect(ctx.destination);
+
+            osc.start(now + start);
+            overtone.start(now + start);
+            osc.stop(now + start + dur + 0.02);
+            overtone.stop(now + start + dur + 0.02);
+          });
+        }
+
+        /** Authentic Singapore MRT Door-Closing Chime ("Bee-boo... Bee-boo...") */
+        playDoorClosingChime() {
+          const ctx = this.ensureContext();
+          if (!ctx) return;
+          const now = ctx.currentTime;
+
+          // Two cycles of descending two-tone alert ("Bee-boo... Bee-boo...")
+          [0.0, 0.62].forEach((offset) => {
+            const pair = [
+              { freq: 932.33, start: offset, dur: 0.22 },        // Bb5 ("Bee")
+              { freq: 698.46, start: offset + 0.20, dur: 0.32 }  // F5 ("boo")
+            ];
+            pair.forEach(({ freq, start, dur }) => {
+              const osc = ctx.createOscillator();
+              const gain = ctx.createGain();
+              osc.type = 'square';
+
+              const lp = ctx.createBiquadFilter();
+              lp.type = 'lowpass';
+              lp.frequency.value = 2100;
+
+              osc.frequency.setValueAtTime(freq, now + start);
+              gain.gain.setValueAtTime(0.001, now + start);
+              gain.gain.linearRampToValueAtTime(0.11, now + start + 0.015);
+              gain.gain.setValueAtTime(0.11, now + start + dur * 0.65);
+              gain.gain.exponentialRampToValueAtTime(0.001, now + start + dur);
+
+              osc.connect(lp);
+              lp.connect(gain);
+              gain.connect(ctx.destination);
+              osc.start(now + start);
+              osc.stop(now + start + dur + 0.02);
+            });
+          });
+        }
+
+        /** Amber delay advisory dual-beep */
+        playDelayAlert() {
+          const ctx = this.ensureContext();
+          if (!ctx) return;
+          const now = ctx.currentTime;
+          [0, 0.22].forEach((offset) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(587.33, now + offset);
+            gain.gain.setValueAtTime(0.001, now + offset);
+            gain.gain.linearRampToValueAtTime(0.14, now + offset + 0.015);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.18);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now + offset);
+            osc.stop(now + offset + 0.2);
+          });
+        }
+      }
+
+      /* =========================================================================
+       * 3. HIGH-RES DYNAMIC CANVAS RENDERERS (2048x1152 Map & 1280x720 PIDS)
+       * ========================================================================= */
+      const ScreenRenderers = {
+        /** Light-slate classroom floor with subtle architectural tiles */
+        createFloorTexture() {
+          const c = document.createElement('canvas');
+          c.width = 1024;
+          c.height = 1024;
+          const ctx = c.getContext('2d');
+
+          ctx.fillStyle = '#3b4453';
+          ctx.fillRect(0, 0, 1024, 1024);
+
+          ctx.strokeStyle = 'rgba(226, 232, 240, 0.12)';
+          ctx.lineWidth = 2;
+          for (let i = 0; i <= 1024; i += 128) {
+            ctx.beginPath();
+            ctx.moveTo(i, 0);
+            ctx.lineTo(i, 1024);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(0, i);
+            ctx.lineTo(1024, i);
+            ctx.stroke();
+          }
+
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.025)';
+          for (let i = 0; i < 600; i++) {
+            ctx.fillRect(Math.random() * 1024, Math.random() * 1024, 2, 2);
+          }
+
+          const tex = new THREE.CanvasTexture(c);
+          tex.wrapS = THREE.RepeatWrapping;
+          tex.wrapT = THREE.RepeatWrapping;
+          tex.repeat.set(7, 7);
+          tex.anisotropy = 8;
+          return tex;
+        },
+
+        /** Authentic Singapore MRT Yellow Safety Tactile Paving Strip (Studs + Directional Bars) */
+        createTactilePaverTexture() {
+          const c = document.createElement('canvas');
+          c.width = 512;
+          c.height = 256;
+          const ctx = c.getContext('2d');
+
+          ctx.fillStyle = '#eab308';
+          ctx.fillRect(0, 0, 512, 256);
+
+          // Tile seams
+          ctx.strokeStyle = 'rgba(133, 77, 14, 0.35)';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(0, 128);
+          ctx.lineTo(512, 128);
+          ctx.moveTo(256, 0);
+          ctx.lineTo(256, 256);
+          ctx.stroke();
+
+          // Top half: Raised warning blister studs
+          for (let x = 24; x < 512; x += 32) {
+            for (let y = 20; y < 120; y += 32) {
+              ctx.fillStyle = '#a16207';
+              ctx.beginPath();
+              ctx.arc(x + 2, y + 2, 8, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.fillStyle = '#fef08a';
+              ctx.beginPath();
+              ctx.arc(x, y, 8, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
+
+          // Bottom half: Raised directional guide bars
+          for (let y = 148; y < 246; y += 26) {
+            ctx.fillStyle = '#a16207';
+            ctx.fillRect(14, y + 2, 228, 10);
+            ctx.fillRect(270, y + 2, 228, 10);
+            ctx.fillStyle = '#fef08a';
+            ctx.fillRect(12, y, 228, 10);
+            ctx.fillRect(268, y, 228, 10);
+          }
+
+          const tex = new THREE.CanvasTexture(c);
+          tex.wrapS = THREE.RepeatWrapping;
+          tex.wrapT = THREE.RepeatWrapping;
+          tex.repeat.set(7, 1);
+          tex.anisotropy = 8;
+          return tex;
+        },
+
+        /** Create 2048x1152 High-Res Lower Map Canvas */
+        createMapCanvas() {
+          const canvas = document.createElement('canvas');
+          canvas.width = MAP_W;
+          canvas.height = MAP_H;
+          const texture = new THREE.CanvasTexture(canvas);
+          texture.anisotropy = 8;
+          return { canvas, ctx: canvas.getContext('2d'), texture };
+        },
+
+        /** Helper to sample point along the NSL route path between origin and destination */
+        buildRoutePolyline(destIndex) {
+          const pts = [];
+          const step = destIndex < ORIGIN_INDEX ? -1 : 1;
+
+          for (let i = ORIGIN_INDEX; ; i += step) {
+            const curr = NSL_STATIONS[i];
+            pts.push({ x: curr.x, y: curr.y });
+
+            if (i === destIndex) break;
+
+            // Insert smooth semicircular U-turn points when crossing between NS16 (13) and NS15 (12)
+            if (i === 13 && step === -1) {
+              const cx = X_RIGHT;
+              const cy = (ROW_TOP_Y + ROW_BOT_Y) / 2;
+              for (let s = 1; s < 16; s++) {
+                const ang = Math.PI / 2 - (s / 16) * Math.PI; // +90 deg down to -90 deg
+                pts.push({
+                  x: cx + Math.cos(ang) * U_RADIUS,
+                  y: cy + Math.sin(ang) * U_RADIUS
+                });
+              }
+            }
+          }
+          return pts;
+        },
+
+        /** Draw the 26-station Singapore MRT North-South Line Interactive Map */
+        renderMap(mapObj, state, timeSec) {
+          const { ctx, texture } = mapObj;
+          const selectedIdx = state.selectedStationIndex;
+          const hoveredIdx = state.hoveredStationIndex;
+          const direction = state.direction; // null | 'north' | 'south'
+
+          // 1. Clean high-contrast light architectural transit map background
+          ctx.fillStyle = '#f8fafc';
+          ctx.fillRect(0, 0, MAP_W, MAP_H);
+
+          // Subtle background schematic grid
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.14)';
+          ctx.lineWidth = 2;
+          for (let x = 0; x < MAP_W; x += 96) {
+            ctx.beginPath();
+            ctx.moveTo(x, 150);
+            ctx.lineTo(x, MAP_H);
+            ctx.stroke();
+          }
+          for (let y = 150; y < MAP_H; y += 96) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(MAP_W, y);
+            ctx.stroke();
+          }
+
+          // 2. Top Header Instruction Banner
+          const headerBg = selectedIdx !== null ? '#065f46' : '#0f172a';
+          ctx.fillStyle = headerBg;
+          ctx.fillRect(0, 0, MAP_W, 148);
+
+          // Red NSL Line Pill Badge
+          ctx.fillStyle = '#d42e12';
+          ctx.beginPath();
+          ctx.roundRect(42, 34, 240, 80, 18);
+          ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '900 36px Inter, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('NSL  RED', 162, 87);
+
+          // Dynamic Prompt / Guidance Text
+          ctx.textAlign = 'left';
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '800 46px Inter, sans-serif';
+          if (selectedIdx === null) {
+            ctx.fillText('Touch your destination station to find your platform.', 318, 90);
+          } else {
+            const st = NSL_STATIONS[selectedIdx];
+            const plat = direction === 'north' ? 'Platform A' : 'Platform B';
+            ctx.fillText(`Heading to ${st.name} (${st.code})  →  Take ${plat}!`, 318, 90);
+          }
+
+          // 3. Directional Tier Guides
+          ctx.font = '800 26px Inter, sans-serif';
+          ctx.fillStyle = '#64748b';
+          ctx.textAlign = 'left';
+          ctx.fillText('◀  NORTHBOUND TOWARDS JURONG EAST (PLATFORM A)', 140, 212);
+          ctx.textAlign = 'left';
+          ctx.fillText('◀  SOUTHBOUND TOWARDS MARINA SOUTH PIER (PLATFORM B)', 140, 1022);
+
+          // 4. Base Red Line (#D42E12) Continuous Serpentine Track
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.strokeStyle = '#d42e12';
+          ctx.lineWidth = 22;
+          ctx.beginPath();
+          ctx.moveTo(X_LEFT, ROW_TOP_Y);
+          ctx.lineTo(X_RIGHT, ROW_TOP_Y);
+          ctx.arc(X_RIGHT, (ROW_TOP_Y + ROW_BOT_Y) / 2, U_RADIUS, -Math.PI / 2, Math.PI / 2, false);
+          ctx.lineTo(X_LEFT, ROW_BOT_Y);
+          ctx.stroke();
+
+          // 5. Animated Glowing Emerald Green Route Path (Origin -> Selected Destination)
+          if (selectedIdx !== null && selectedIdx !== ORIGIN_INDEX) {
+            const poly = this.buildRoutePolyline(selectedIdx);
+
+            // Outer glowing halo
+            ctx.save();
+            ctx.strokeStyle = 'rgba(16, 185, 129, 0.35)';
+            ctx.lineWidth = 44;
+            ctx.beginPath();
+            poly.forEach((p, idx) => (idx === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+            ctx.stroke();
+
+            // Crisp emerald core line
+            ctx.strokeStyle = '#10b981';
+            ctx.lineWidth = 24;
+            ctx.stroke();
+
+            // Animated moving white directional pulse dashes flowing from Ang Mo Kio to destination
+            ctx.strokeStyle = '#ecfdf5';
+            ctx.lineWidth = 10;
+            ctx.setLineDash([24, 34]);
+            ctx.lineDashOffset = -(timeSec * 150);
+            ctx.stroke();
+            ctx.restore();
+          }
+
+          // 6. Draw All 26 Station Nodes & Crisp Rotated/Staggered Labels
+          const minRoute = selectedIdx !== null ? Math.min(ORIGIN_INDEX, selectedIdx) : -1;
+          const maxRoute = selectedIdx !== null ? Math.max(ORIGIN_INDEX, selectedIdx) : -1;
+
+          NSL_STATIONS.forEach((st, idx) => {
+            const isOrigin = idx === ORIGIN_INDEX;
+            const isSelected = idx === selectedIdx;
+            const isHovered = idx === hoveredIdx;
+            const onRoute = selectedIdx !== null && idx >= minRoute && idx <= maxRoute;
+            const isKeyTarget = Boolean(st.targetBadge);
+
+            // Pulsating golden halo on Ang Mo Kio ("YOU ARE HERE")
+            if (isOrigin) {
+              const pulse = 0.5 + 0.5 * Math.sin(timeSec * 4.5);
+              ctx.fillStyle = `rgba(245, 158, 11, ${0.22 + pulse * 0.25})`;
+              ctx.beginPath();
+              ctx.arc(st.x, st.y, 38 + pulse * 16, 0, Math.PI * 2);
+              ctx.fill();
+            }
+
+            // Highlight ring on selected or hovered station
+            if (isSelected || isHovered) {
+              ctx.fillStyle = isSelected ? 'rgba(16, 185, 129, 0.32)' : 'rgba(56, 189, 248, 0.28)';
+              ctx.beginPath();
+              ctx.arc(st.x, st.y, 40, 0, Math.PI * 2);
+              ctx.fill();
+            }
+
+            // Station Touch Circle
+            const r = isOrigin ? 24 : (isSelected || isKeyTarget ? 22 : 17);
+            ctx.fillStyle = isOrigin ? '#facc15' : (isSelected ? '#10b981' : '#ffffff');
+            ctx.beginPath();
+            ctx.arc(st.x, st.y, r, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.lineWidth = isOrigin || isSelected || isKeyTarget ? 7 : 5;
+            ctx.strokeStyle = isOrigin ? '#92400e' : (onRoute ? '#059669' : '#d42e12');
+            ctx.stroke();
+
+            // NS Code Pill Badge
+            const isTopRow = st.row === 0;
+            const codeY = isTopRow ? st.y - 44 : st.y + 44;
+
+            ctx.fillStyle = isOrigin ? '#eab308' : (onRoute ? '#059669' : '#d42e12');
+            ctx.beginPath();
+            ctx.roundRect(st.x - 38, codeY - 17, 76, 32, 8);
+            ctx.fill();
+
+            ctx.fillStyle = isOrigin ? '#0f172a' : '#ffffff';
+            ctx.font = '800 20px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(st.code, st.x, codeY + 6);
+
+            // Station Name (Staggered alternating vertical offset so all 26 names are 100% legible with zero overlap)
+            const stagger = (idx % 2 === 0) ? 0 : 38;
+            const nameY = isTopRow
+              ? (st.y + 58 + stagger)
+              : (st.y - 50 - stagger);
+
+            // Connector tick for staggered labels
+            if (stagger > 0) {
+              ctx.strokeStyle = 'rgba(100, 116, 139, 0.45)';
+              ctx.lineWidth = 2;
+              ctx.beginPath();
+              ctx.moveTo(st.x, isTopRow ? st.y + 22 : st.y - 22);
+              ctx.lineTo(st.x, isTopRow ? nameY - 22 : nameY + 10);
+              ctx.stroke();
+            }
+
+            ctx.fillStyle = isSelected ? '#047857' : (isOrigin ? '#92400e' : '#0f172a');
+            ctx.font = (isOrigin || isSelected || isKeyTarget)
+              ? '900 25px Inter, sans-serif'
+              : '700 22px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(st.name, st.x, nameY);
+
+            // "YOU ARE HERE" Gold Callout Pin on Ang Mo Kio
+            if (isOrigin) {
+              const pinY = st.y + 84;
+              ctx.fillStyle = '#f59e0b';
+              ctx.beginPath();
+              ctx.roundRect(st.x - 110, pinY, 220, 44, 12);
+              ctx.fill();
+              ctx.strokeStyle = '#78350f';
+              ctx.lineWidth = 3;
+              ctx.stroke();
+
+              ctx.fillStyle = '#0f172a';
+              ctx.font = '900 22px Inter, sans-serif';
+              ctx.fillText('★ YOU ARE HERE', st.x, pinY + 30);
+            }
+
+            // Prominent Training Target Callout Badges on [WOODLANDS] and [ORCHARD]
+            if (isKeyTarget) {
+              const badgeY = isTopRow ? st.y - 118 : st.y + 86;
+              const badgeColor = isSelected ? '#059669' : '#0284c7';
+              ctx.fillStyle = badgeColor;
+              ctx.beginPath();
+              ctx.roundRect(st.x - 126, badgeY, 252, 42, 12);
+              ctx.fill();
+              ctx.fillStyle = '#ffffff';
+              ctx.font = '800 19px Inter, sans-serif';
+              ctx.fillText(isSelected ? '✓ SELECTED TARGET' : `TAP: ${st.name.toUpperCase()}`, st.x, badgeY + 28);
+            }
+          });
+
+          // 7. Bottom Footer Bar
+          ctx.fillStyle = '#e2e8f0';
+          ctx.fillRect(0, MAP_H - 64, MAP_W, 64);
+          ctx.fillStyle = '#334155';
+          ctx.font = '700 24px Inter, sans-serif';
+          ctx.textAlign = 'left';
+          ctx.fillText('Singapore MRT North-South Line (NSL)  •  Interactive Wayfinding Trainer', 48, MAP_H - 22);
+
+          ctx.textAlign = 'right';
+          ctx.fillStyle = '#0f172a';
+          ctx.fillText('Accessible 48" Touchscreen  •  Driven by Concealed Mini-PC', MAP_W - 48, MAP_H - 22);
+
+          texture.needsUpdate = true;
+        },
+
+        /** Create 1280x720 High-Res Platform PIDS Canvas */
+        createPidsCanvas() {
+          const canvas = document.createElement('canvas');
+          canvas.width = 1280;
+          canvas.height = 720;
+          const texture = new THREE.CanvasTexture(canvas);
+          texture.anisotropy = 8;
+          return { canvas, ctx: canvas.getContext('2d'), texture };
+        },
+
+        /** Render SMRT-Style Platform A or B PIDS Display */
+        renderPids(pidsObj, platformLetter, state, timeSec) {
+          const { ctx, texture } = pidsObj;
+          const W = 1280;
+          const H = 720;
+          const isA = platformLetter === 'A';
+
+          // Determine Platform Status Mode
+          const isCorrect =
+            (isA && state.direction === 'north') ||
+            (!isA && state.direction === 'south');
+          const isDistractor =
+            (isA && state.direction === 'south') ||
+            (!isA && state.direction === 'north');
+
+          const isTargetForRemote =
+            state.direction === null
+              ? isA // Default to Platform A if no route chosen yet
+              : isCorrect;
+
+          const showDelay = state.delayActive;
+          const showArriving = state.arrivingActive && isTargetForRemote;
+          const showDoorWarning = state.doorWarningUntil > performance.now() && isTargetForRemote;
+
+          const flashFast = Math.sin(timeSec * 12) > 0;
+          const flashSlow = Math.sin(timeSec * 5) > 0;
+
+          // 1. Background
+          ctx.fillStyle = isDistractor ? '#181c22' : '#0b111c';
+          ctx.fillRect(0, 0, W, H);
+
+          // 2. Dark Charcoal Header Bar with Red Line Icon & Platform Title
+          ctx.fillStyle = isDistractor ? '#232830' : '#1e242e';
+          ctx.fillRect(0, 0, W, 148);
+
+          // Red NSL Line Icon Pill
+          ctx.fillStyle = isDistractor ? '#6b7280' : '#d42e12';
+          ctx.beginPath();
+          ctx.roundRect(38, 34, 150, 80, 16);
+          ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '900 42px Inter, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('NSL', 113, 89);
+
+          // Platform A / B Label
+          ctx.textAlign = 'left';
+          ctx.fillStyle = isDistractor ? '#9ca3af' : '#ffffff';
+          ctx.font = '900 62px Inter, sans-serif';
+          ctx.fillText(`Platform ${platformLetter}`, 220, 96);
+
+          // Top-Right Blinking Red Door-Closing Warning Indicator (when triggered by Teacher Remote)
+          if (showDoorWarning) {
+            ctx.fillStyle = flashFast ? '#ef4444' : '#7f1d1d';
+            ctx.beginPath();
+            ctx.roundRect(805, 34, 435, 80, 16);
+            ctx.fill();
+            ctx.strokeStyle = '#fca5a5';
+            ctx.lineWidth = 4;
+            ctx.stroke();
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '900 34px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('⚠ DOORS CLOSING', 1022, 86);
+          } else {
+            // Clock / SMRT Station Code
+            ctx.textAlign = 'right';
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '700 32px Inter, sans-serif';
+            ctx.fillText('NS16 Ang Mo Kio', W - 44, 88);
+          }
+
+          // 3. Main Body Content
+          ctx.textAlign = 'left';
+
+          if (showDelay) {
+            // Amber Delay Advisory Override
+            ctx.fillStyle = '#f59e0b';
+            ctx.beginPath();
+            ctx.roundRect(42, 186, W - 84, 340, 26);
+            ctx.fill();
+
+            ctx.fillStyle = '#0f172a';
+            ctx.font = '900 56px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('⚠  TRAIN SERVICE DELAYED', W / 2, 305);
+
+            ctx.font = '800 40px Inter, sans-serif';
+            ctx.fillText('Please Wait Behind Yellow Line', W / 2, 392);
+
+            ctx.font = '700 28px Inter, sans-serif';
+            ctx.fillStyle = '#451a03';
+            ctx.fillText('Listen to station announcements for updates.', W / 2, 466);
+
+          } else {
+            // Direction Label
+            const dirText = isA
+              ? 'Towards Jurong East (via Woodlands)'
+              : 'Towards Marina South Pier (via Orchard)';
+
+            ctx.fillStyle = isDistractor ? '#6b7280' : '#94a3b8';
+            ctx.font = '700 30px Inter, sans-serif';
+            ctx.fillText('DIRECTION', 52, 214);
+
+            ctx.fillStyle = isDistractor ? '#9ca3af' : '#f8fafc';
+            ctx.font = '800 50px Inter, sans-serif';
+            ctx.fillText(dirText, 52, 278);
+
+            // Train Countdown Panel
+            ctx.fillStyle = isDistractor ? '#232933' : '#141e30';
+            ctx.beginPath();
+            ctx.roundRect(48, 316, W - 96, 206, 22);
+            ctx.fill();
+            ctx.strokeStyle = isCorrect ? '#10b981' : 'rgba(148, 163, 184, 0.25)';
+            ctx.lineWidth = isCorrect ? 5 : 2;
+            ctx.stroke();
+
+            // 1st Train Row
+            ctx.fillStyle = isDistractor ? '#6b7280' : '#cbd5e1';
+            ctx.font = '700 34px Inter, sans-serif';
+            ctx.fillText('1st Train', 88, 398);
+
+            // Countdown Time Value
+            const baseMins = isA ? '2 mins' : (isCorrect ? '3 mins' : '4 mins');
+            const timerText = showArriving ? 'Arr / Arriving Now' : baseMins;
+            ctx.textAlign = 'right';
+            ctx.fillStyle = showArriving
+              ? (flashFast ? '#34d399' : '#facc15')
+              : (isDistractor ? '#6b7280' : '#34d399');
+            ctx.font = showArriving ? '900 58px Inter, sans-serif' : '900 68px Inter, sans-serif';
+            ctx.fillText(timerText, W - 88, 408);
+
+            // Divider
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.18)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(88, 440);
+            ctx.lineTo(W - 88, 440);
+            ctx.stroke();
+
+            // 2nd Train Row
+            ctx.textAlign = 'left';
+            ctx.fillStyle = '#64748b';
+            ctx.font = '600 28px Inter, sans-serif';
+            ctx.fillText('2nd Train', 88, 492);
+            ctx.textAlign = 'right';
+            ctx.fillText(isA ? '6 mins' : '8 mins', W - 88, 492);
+          }
+
+          // 4. Bottom Status Banner (CORRECT vs Opposite Route vs Default)
+          ctx.textAlign = 'center';
+          if (isCorrect) {
+            ctx.fillStyle = flashSlow ? '#059669' : '#10b981';
+            ctx.fillRect(0, H - 134, W, 134);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '900 44px Inter, sans-serif';
+            const arrivalLabel = showArriving
+              ? 'Arriving Now'
+              : (isA ? '2 mins' : '3 mins');
+            ctx.fillText(`✓  Platform ${platformLetter} (CORRECT)  —  Train Arriving: ${arrivalLabel}`, W / 2, H - 52);
+          } else if (isDistractor) {
+            ctx.fillStyle = '#272d37';
+            ctx.fillRect(0, H - 134, W, 134);
+            ctx.fillStyle = '#9ca3af';
+            ctx.font = '700 36px Inter, sans-serif';
+            const oppDest = isA ? 'Jurong East' : 'Marina South Pier';
+            ctx.fillText(`Platform ${platformLetter} — Towards ${oppDest} (Opposite Route)`, W / 2, H - 55);
+          } else {
+            ctx.fillStyle = '#141b26';
+            ctx.fillRect(0, H - 134, W, 134);
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '700 34px Inter, sans-serif';
+            ctx.fillText('Select your destination on the touchscreen map below', W / 2, H - 55);
+          }
+
+          // 5. Vibrant Perimeter Halo Border when Correct or Door Warning
+          if (showDoorWarning && flashFast) {
+            ctx.strokeStyle = '#ef4444';
+            ctx.lineWidth = 22;
+            ctx.strokeRect(11, 11, W - 22, H - 22);
+          } else if (isCorrect) {
+            ctx.strokeStyle = '#10b981';
+            ctx.lineWidth = 18;
+            ctx.strokeRect(9, 9, W - 18, H - 18);
+          } else if (showDelay) {
+            ctx.strokeStyle = '#f59e0b';
+            ctx.lineWidth = 18;
+            ctx.strokeRect(9, 9, W - 18, H - 18);
+          }
+
+          texture.needsUpdate = true;
+        }
+      };
+
+      /* =========================================================================
+       * 4. 3D CLASSROOM WALL & HARDWARE ARCHITECTURE BUILDER
+       * ========================================================================= */
+      class TrainingWallBuilder {
+        constructor(scene) {
+          this.scene = scene;
+          this.refs = {};
+        }
+
+        buildAll() {
+          this.buildLighting();
+          this.buildClassroomBackdrop();
+          this.buildTechnicalConcealmentHardware();
+          this.buildUpperPlatformTVs();
+          this.buildLowerInteractiveMapTV();
+        }
+
+        buildLighting() {
+          const hemi = new THREE.HemisphereLight(0xf8fafc, 0x334155, 0.72);
+          hemi.position.set(0, 6, 0);
+          this.scene.add(hemi);
+
+          const ambient = new THREE.AmbientLight(0xe2e8f0, 0.25);
+          this.scene.add(ambient);
+
+          // Main studio/classroom directional key light with soft shadows
+          const keyLight = new THREE.DirectionalLight(0xffffff, 0.88);
+          keyLight.position.set(2.8, 4.6, 3.8);
+          keyLight.castShadow = true;
+          keyLight.shadow.mapSize.width = 2048;
+          keyLight.shadow.mapSize.height = 2048;
+          keyLight.shadow.camera.near = 0.5;
+          keyLight.shadow.camera.far = 16;
+          keyLight.shadow.camera.left = -3.5;
+          keyLight.shadow.camera.right = 3.5;
+          keyLight.shadow.camera.top = 3.5;
+          keyLight.shadow.camera.bottom = -3.5;
+          keyLight.shadow.bias = -0.0004;
+          this.scene.add(keyLight);
+
+          // Side technical cutaway inspection fill light so concealed rear Mini-PC & PDU read clearly
+          const sideFill = new THREE.DirectionalLight(0xbae6fd, 0.48);
+          sideFill.position.set(3.5, 1.8, 0.2);
+          this.scene.add(sideFill);
+
+          const backFill = new THREE.DirectionalLight(0xcbd5e1, 0.32);
+          backFill.position.set(-2.5, 2.6, -2.5);
+          this.scene.add(backFill);
+
+          // Subtle screen glow lights
+          const mapGlow = new THREE.PointLight(0xe0f2fe, 0.35, 2.2);
+          mapGlow.position.set(0, DIM.tv48Y, 0.45);
+          this.scene.add(mapGlow);
+        }
+
+        buildClassroomBackdrop() {
+          // Light-slate architectural classroom floor
+          const floor = new THREE.Mesh(
+            new THREE.PlaneGeometry(16, 16),
+            new THREE.MeshStandardMaterial({
+              map: ScreenRenderers.createFloorTexture(),
+              roughness: 0.76,
+              metalness: 0.1
+            })
+          );
+          floor.rotation.x = -Math.PI / 2;
+          floor.receiveShadow = true;
+          this.scene.add(floor);
+
+          // Singapore MRT Yellow Safety Tactile Paving Strip running parallel to the wall
+          const tactileStrip = new THREE.Mesh(
+            new THREE.BoxGeometry(3.8, 0.012, 0.46),
+            new THREE.MeshStandardMaterial({
+              map: ScreenRenderers.createTactilePaverTexture(),
+              roughness: 0.68,
+              metalness: 0.05
+            })
+          );
+          tactileStrip.position.set(0, 0.006, 0.85);
+          tactileStrip.receiveShadow = true;
+          this.scene.add(tactileStrip);
+
+          // Freestanding Neutral Light-Grey Partition Wall Slab (3.8m W x 2.85m H x 0.14m thick)
+          // Front face sits cleanly at Z = 0.0 so all wall-mounted hardware references Z >= 0
+          const wallMat = new THREE.MeshStandardMaterial({
+            color: 0xd8dee6,
+            roughness: 0.86,
+            metalness: 0.04
+          });
+          const wall = new THREE.Mesh(
+            new THREE.BoxGeometry(DIM.wallW, DIM.wallH, DIM.wallThick),
+            wallMat
+          );
+          wall.position.set(0, DIM.wallH / 2, -DIM.wallThick / 2);
+          wall.castShadow = true;
+          wall.receiveShadow = true;
+          this.scene.add(wall);
+
+          // Subtle Architectural Skirting Board along front & back bottom edges
+          const skirtMat = new THREE.MeshStandardMaterial({
+            color: 0x475569,
+            roughness: 0.55,
+            metalness: 0.2
+          });
+          const frontSkirt = new THREE.Mesh(new THREE.BoxGeometry(DIM.wallW + 0.008, 0.11, 0.016), skirtMat);
+          frontSkirt.position.set(0, 0.055, 0.008);
+          this.scene.add(frontSkirt);
+
+          const backSkirt = new THREE.Mesh(new THREE.BoxGeometry(DIM.wallW + 0.008, 0.11, 0.016), skirtMat);
+          backSkirt.position.set(0, 0.055, -DIM.wallThick - 0.008);
+          this.scene.add(backSkirt);
+
+          // Subtle Wall Edge Cap Trim
+          const edgeTrim = new THREE.Mesh(
+            new THREE.BoxGeometry(DIM.wallW + 0.015, 0.03, DIM.wallThick + 0.015),
+            new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.5, metalness: 0.35 })
+          );
+          edgeTrim.position.set(0, DIM.wallH + 0.015, -DIM.wallThick / 2);
+          this.scene.add(edgeTrim);
+        }
+
+        /**
+         * Technical Concealment Cavity (Behind Lower 48" TV, Z = 0.0 to 0.065)
+         * Clearly inspectable from the Side Technical Cutaway camera preset.
+         */
+        buildTechnicalConcealmentHardware() {
+          const steelBlackMat = new THREE.MeshStandardMaterial({ color: 0x1e242c, roughness: 0.45, metalness: 0.65 });
+          const miniPcMat = new THREE.MeshStandardMaterial({ color: 0x11151b, roughness: 0.48, metalness: 0.5 });
+          const pduMetalMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.38, metalness: 0.72 });
+          const conduitMat = new THREE.MeshStandardMaterial({ color: 0xcbd2db, roughness: 0.72, metalness: 0.08 });
+          const cableMat = new THREE.MeshStandardMaterial({ color: 0x0f1318, roughness: 0.7, metalness: 0.15 });
+
+          // 1. Heavy-Duty VESA Wall Mount Bracket for Lower 48" TV (creates 65mm standoff cavity)
+          const vesaPlate48 = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.34, 0.012), steelBlackMat);
+          vesaPlate48.position.set(0, DIM.tv48Y, 0.006);
+          this.scene.add(vesaPlate48);
+
+          [-0.18, 0.18].forEach((vx) => {
+            const rail = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.42, 0.052), steelBlackMat);
+            rail.position.set(vx, DIM.tv48Y, 0.038);
+            this.scene.add(rail);
+          });
+
+          // 2. Industrial Matte-Black Mini-PC Chassis (Mounted flush on wall right-side inside 65mm cavity)
+          //    Thickness = 0.036m -> Leaves crisp ventilation clearance behind the 48" TV
+          const miniPcGroup = new THREE.Group();
+          miniPcGroup.position.set(0.32, DIM.tv48Y + 0.04, 0.022);
+
+          const pcBody = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.19, 0.036), miniPcMat);
+          pcBody.castShadow = true;
+          miniPcGroup.add(pcBody);
+
+          // Cooling Fins on Right & Left Edges of Mini-PC (visible from Side Cutaway)
+          for (let i = 0; i < 9; i++) {
+            const fin = new THREE.Mesh(new THREE.BoxGeometry(0.196, 0.007, 0.032), steelBlackMat);
+            fin.position.y = -0.072 + i * 0.018;
+            miniPcGroup.add(fin);
+          }
+
+          // Glowing Blue Power LED on Right Edge facing Side Cutaway
+          const blueLedMat = new THREE.MeshStandardMaterial({
+            color: 0x38bdf8,
+            emissive: 0x0ea5e9,
+            emissiveIntensity: 2.2
+          });
+          const powerLed = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.012, 0.012), blueLedMat);
+          powerLed.position.set(0.097, 0.062, 0.005);
+          miniPcGroup.add(powerLed);
+
+          const ledGlow = new THREE.PointLight(0x38bdf8, 0.45, 0.55);
+          ledGlow.position.set(0.14, 0.062, 0.015);
+          miniPcGroup.add(ledGlow);
+
+          // HDMI & USB Port Accents along top/bottom edge of Mini-PC
+          const portGoldMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.85, roughness: 0.25 });
+          [-0.045, -0.015, 0.015, 0.045].forEach((px) => {
+            const port = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.008, 0.010), portGoldMat);
+            port.position.set(px, 0.096, 0);
+            miniPcGroup.add(port);
+          });
+
+          this.scene.add(miniPcGroup);
+          this.refs.miniPcLed = blueLedMat;
+
+          // 3. 4-Way Surge-Protected Metal Power Strip (PDU) mounted beside the Mini-PC
+          const pduGroup = new THREE.Group();
+          pduGroup.position.set(0.32, DIM.tv48Y - 0.16, 0.02);
+
+          const pduBody = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.056, 0.032), pduMetalMat);
+          pduBody.castShadow = true;
+          pduGroup.add(pduBody);
+
+          // Illuminated Red Surge Rocker Switch
+          const redSwitch = new THREE.Mesh(
+            new THREE.BoxGeometry(0.022, 0.026, 0.012),
+            new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xdc2626, emissiveIntensity: 1.5 })
+          );
+          redSwitch.position.set(0.095, 0, 0.018);
+          pduGroup.add(redSwitch);
+
+          // 4 Outlet Sockets with Tidy Black Molded Power Plugs
+          [-0.08, -0.03, 0.02, 0.065].forEach((ox, idx) => {
+            const socket = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.032, 0.008), miniPcMat);
+            socket.position.set(ox, 0, 0.017);
+            pduGroup.add(socket);
+
+            if (idx < 3) {
+              const plug = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.024, 0.018), cableMat);
+              plug.position.set(ox, 0, 0.024);
+              pduGroup.add(plug);
+            }
+          });
+          this.scene.add(pduGroup);
+
+          // 4. Slim Paintable Light-Grey Cable Conduit Channel + Flush Wall Grommets
+          //    Runs cleanly up the 150mm gap between Screen A & Screen B, branching neatly into each TV
+          const vertConduit = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.92, 0.018), conduitMat);
+          vertConduit.position.set(0, 1.45, 0.009);
+          vertConduit.receiveShadow = true;
+          this.scene.add(vertConduit);
+
+          // Horizontal Branch Conduits at Upper Tier height (Y = 1.88) into Screen A & Screen B
+          const horizConduit = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.036, 0.018), conduitMat);
+          horizConduit.position.set(0, DIM.tv32Y, 0.009);
+          this.scene.add(horizConduit);
+
+          // Flush Wall Grommet Junction Rings
+          const grommetGeo = new THREE.CylinderGeometry(0.024, 0.024, 0.012, 20);
+          grommetGeo.rotateX(Math.PI / 2);
+          [
+            [0, 1.32],
+            [0, DIM.tv32Y],
+            [-0.44, DIM.tv32Y],
+            [0.44, DIM.tv32Y]
+          ].forEach(([gx, gy]) => {
+            const grommet = new THREE.Mesh(grommetGeo, steelBlackMat);
+            grommet.position.set(gx, gy, 0.012);
+            this.scene.add(grommet);
+          });
+
+          // Tidy Short Routed Cable Links between Mini-PC, PDU, and Conduit (Zero loose hanging cords)
+          const link1 = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.24, 8), cableMat);
+          link1.rotation.z = Math.PI / 2;
+          link1.position.set(0.14, DIM.tv48Y + 0.09, 0.022);
+          this.scene.add(link1);
+
+          const link2 = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.14, 8), cableMat);
+          link2.position.set(0.28, DIM.tv48Y - 0.07, 0.025);
+          this.scene.add(link2);
+
+          // Low-Profile VESA Brackets for Upper 32" TVs (Platform A & Platform B)
+          const tvA_X = -(DIM.tv32W / 2 + DIM.tv32Gap / 2); // -0.44m
+          const tvB_X = +(DIM.tv32W / 2 + DIM.tv32Gap / 2); // +0.44m
+          [tvA_X, tvB_X].forEach((tx) => {
+            const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.22, 0.028), steelBlackMat);
+            bracket.position.set(tx, DIM.tv32Y, 0.014);
+            this.scene.add(bracket);
+          });
+        }
+
+        buildUpperPlatformTVs() {
+          const bezelMat = new THREE.MeshStandardMaterial({ color: 0x11151c, roughness: 0.35, metalness: 0.4 });
+          const tvA_X = -(DIM.tv32W / 2 + DIM.tv32Gap / 2); // -0.44m
+          const tvB_X = +(DIM.tv32W / 2 + DIM.tv32Gap / 2); // +0.44m
+
+          const createPidsTV = (xPos, platformLetter) => {
+            const group = new THREE.Group();
+            group.position.set(xPos, DIM.tv32Y, DIM.tv32Z);
+
+            // Slim Matte-Black 32" Commercial TV Chassis
+            const chassis = new THREE.Mesh(new THREE.BoxGeometry(DIM.tv32W, DIM.tv32H, 0.034), bezelMat);
+            chassis.castShadow = true;
+            chassis.receiveShadow = true;
+            group.add(chassis);
+
+            // Dynamic 1280x720 PIDS Canvas Screen
+            const pidsCanvas = ScreenRenderers.createPidsCanvas();
+            const screenMesh = new THREE.Mesh(
+              new THREE.PlaneGeometry(DIM.tv32W - 0.026, DIM.tv32H - 0.026),
+              new THREE.MeshBasicMaterial({ map: pidsCanvas.texture })
+            );
+            screenMesh.position.z = 0.018;
+            group.add(screenMesh);
+
+            // 3D Emissive Perimeter LED Halo Strip (illuminates green when correct, flashes red on door closing)
+            const haloMat = new THREE.MeshStandardMaterial({
+              color: 0x1e293b,
+              emissive: 0x000000,
+              emissiveIntensity: 0.0,
+              roughness: 0.25
+            });
+            const haloThickness = 0.010;
+            const haloDepth = 0.022;
+            const topBar = new THREE.Mesh(new THREE.BoxGeometry(DIM.tv32W + 0.016, haloThickness, haloDepth), haloMat);
+            topBar.position.set(0, DIM.tv32H / 2 + 0.005, 0.004);
+            const botBar = new THREE.Mesh(new THREE.BoxGeometry(DIM.tv32W + 0.016, haloThickness, haloDepth), haloMat);
+            botBar.position.set(0, -DIM.tv32H / 2 - 0.005, 0.004);
+            const leftBar = new THREE.Mesh(new THREE.BoxGeometry(haloThickness, DIM.tv32H + 0.016, haloDepth), haloMat);
+            leftBar.position.set(-DIM.tv32W / 2 - 0.005, 0, 0.004);
+            const rightBar = new THREE.Mesh(new THREE.BoxGeometry(haloThickness, DIM.tv32H + 0.016, haloDepth), haloMat);
+            rightBar.position.set(DIM.tv32W / 2 + 0.005, 0, 0.004);
+            group.add(topBar, botBar, leftBar, rightBar);
+
+            // Local PointLight for subtle wall wash glow when active
+            const haloLight = new THREE.PointLight(0x10b981, 0.0, 1.4);
+            haloLight.position.set(0, 0, 0.14);
+            group.add(haloLight);
+
+            this.scene.add(group);
+            return { group, pidsCanvas, haloMat, haloLight, platformLetter };
+          };
+
+          this.refs.pidsA = createPidsTV(tvA_X, 'A');
+          this.refs.pidsB = createPidsTV(tvB_X, 'B');
+        }
+
+        buildLowerInteractiveMapTV() {
+          const bezelMat = new THREE.MeshStandardMaterial({ color: 0x10141b, roughness: 0.32, metalness: 0.42 });
+          const bumperMat = new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.85, metalness: 0.1 });
+
+          const group = new THREE.Group();
+          // Front of 65mm standoff + half TV thickness
+          group.position.set(0, DIM.tv48Y, DIM.tv48Standoff + DIM.tv48Depth / 2);
+
+          // 48" Commercial Touchscreen Chassis
+          const chassis = new THREE.Mesh(new THREE.BoxGeometry(DIM.tv48W, DIM.tv48H, DIM.tv48Depth), bezelMat);
+          chassis.castShadow = true;
+          chassis.receiveShadow = true;
+          group.add(chassis);
+
+          // Dynamic 2048x1152 NSL Interactive Map Screen (Raycast Target with UV mapping)
+          const mapCanvas = ScreenRenderers.createMapCanvas();
+          const mapMesh = new THREE.Mesh(
+            new THREE.PlaneGeometry(DIM.tv48W - 0.042, DIM.tv48H - 0.042),
+            new THREE.MeshBasicMaterial({ map: mapCanvas.texture })
+          );
+          mapMesh.position.z = DIM.tv48Depth / 2 + 0.001;
+          mapMesh.userData.isInteractiveMap = true;
+          group.add(mapMesh);
+
+          // Glossy Protective Tempered Glass Front Overlay (subtle reflective specular sheen)
+          const glassMat = new THREE.MeshPhysicalMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.07,
+            roughness: 0.06,
+            metalness: 0.1,
+            clearcoat: 1.0,
+            clearcoatRoughness: 0.05
+          });
+          const glassLayer = new THREE.Mesh(
+            new THREE.PlaneGeometry(DIM.tv48W - 0.012, DIM.tv48H - 0.012),
+            glassMat
+          );
+          glassLayer.position.z = DIM.tv48Depth / 2 + 0.003;
+          group.add(glassLayer);
+
+          // Dark Rubberized Protective Edge Bumpers on the Four Corners
+          const hw = DIM.tv48W / 2;
+          const hh = DIM.tv48H / 2;
+          [[-1, 1], [1, 1], [-1, -1], [1, -1]].forEach(([sx, sy]) => {
+            const horiz = new THREE.Mesh(new THREE.BoxGeometry(0.068, 0.018, DIM.tv48Depth + 0.014), bumperMat);
+            horiz.position.set(sx * (hw - 0.028), sy * (hh + 0.003), 0);
+            const vert = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.068, DIM.tv48Depth + 0.014), bumperMat);
+            vert.position.set(sx * (hw + 0.003), sy * (hh - 0.028), 0);
+            group.add(horiz, vert);
+          });
+
+          this.scene.add(group);
+          this.refs.mapTV = { group, mapCanvas, mapMesh };
+        }
+      }
+
+      /* =========================================================================
+       * 5. SMOOTH CUBIC EASE-IN-OUT CAMERA CONTROLLER
+       * ========================================================================= */
+      class CameraController {
+        constructor(camera, controls) {
+          this.camera = camera;
+          this.controls = controls;
+          this.tween = null;
+
+          this.controls.addEventListener('start', () => {
+            this.tween = null;
+          });
+        }
+
+        flyTo(presetKey, duration = 880) {
+          const preset = CAMERA_PRESETS[presetKey];
+          if (!preset) return;
+          this.tween = {
+            startPos: this.camera.position.clone(),
+            endPos: preset.pos.clone(),
+            startTarget: this.controls.target.clone(),
+            endTarget: preset.target.clone(),
+            startTime: performance.now(),
+            duration
+          };
+        }
+
+        update(now) {
+          if (this.tween) {
+            const elapsed = now - this.tween.startTime;
+            let t = Math.min(1, elapsed / this.tween.duration);
+            t = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+            this.camera.position.lerpVectors(this.tween.startPos, this.tween.endPos, t);
+            this.controls.target.lerpVectors(this.tween.startTarget, this.tween.endTarget, t);
+
+            if (elapsed >= this.tween.duration) {
+              this.tween = null;
+            }
+          }
+          this.controls.update();
+        }
+      }
+
+      /* =========================================================================
+       * 6. MAIN MODULE 2 APPLICATION CONTROLLER
+       * ========================================================================= */
+      class PlatformPidsApp {
+        constructor() {
+          this.container = document.getElementById('canvas-container');
+          this.tooltip = document.getElementById('station-tooltip');
+          this.audio = new TransitAudioEngine();
+          this.raycaster = new THREE.Raycaster();
+          this.pointer = new THREE.Vector2();
+          this.downPos = { x: 0, y: 0 };
+          this.toastTimer = null;
+
+          // Shared Interactive State
+          this.state = {
+            selectedStationIndex: null,
+            hoveredStationIndex: null,
+            direction: null,       // null | 'north' | 'south'
+            arrivingActive: false,
+            delayActive: false,
+            doorWarningUntil: 0
+          };
+
+          this.initThree();
+          this.builder = new TrainingWallBuilder(this.scene);
+          this.builder.buildAll();
+
+          this.camCtrl = new CameraController(this.camera, this.controls);
+
+          this.bindHUD();
+          this.bindMapRaycasting();
+          this.onResize();
+        }
+
+        initThree() {
+          this.scene = new THREE.Scene();
+          this.scene.background = new THREE.Color(0x131b2b);
+          this.scene.fog = new THREE.FogExp2(0x131b2b, 0.055);
+
+          const w = this.container.clientWidth || window.innerWidth;
+          const h = this.container.clientHeight || window.innerHeight;
+
+          this.camera = new THREE.PerspectiveCamera(42, w / h, 0.05, 50);
+          this.camera.position.copy(CAMERA_PRESETS.front.pos);
+
+          this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+          this.renderer.setSize(w, h);
+          this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+          this.renderer.shadowMap.enabled = true;
+          this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+          this.renderer.outputEncoding = THREE.sRGBEncoding;
+          this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+          this.renderer.toneMappingExposure = 1.08;
+          this.container.appendChild(this.renderer.domElement);
+
+          this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
+          this.controls.enableDamping = true;
+          this.controls.dampingFactor = 0.07;
+          this.controls.minDistance = 0.72;
+          this.controls.maxDistance = 6.2;
+          this.controls.maxPolarAngle = Math.PI / 2 - 0.02;
+          this.controls.target.copy(CAMERA_PRESETS.front.target);
+          this.controls.update();
+        }
+
+        /* ---------------- Route & Teacher Remote Actions ---------------- */
+
+        selectStation(index) {
+          if (index === ORIGIN_INDEX) {
+            this.audio.playClick(620);
+            this.showToast('You are already at Ang Mo Kio (NS16). Tap a destination station!', 'bg-amber-400');
+            return;
+          }
+
+          const st = NSL_STATIONS[index];
+          this.state.selectedStationIndex = index;
+          this.state.direction = index < ORIGIN_INDEX ? 'north' : 'south';
+          this.state.arrivingActive = false;
+          this.state.delayActive = false;
+
+          this.audio.playTouchConfirm();
+
+          const platLabel = this.state.direction === 'north' ? 'Platform A (Northbound)' : 'Platform B (Southbound)';
+          this.showToast(`Destination: ${st.name} (${st.code}) → Take ${platLabel}`, 'bg-emerald-400');
+        }
+
+        blinkRfLed() {
+          const led = document.getElementById('rf-led');
+          led.classList.remove('rf-led-tx');
+          void led.offsetWidth; // trigger reflow to restart animation
+          led.classList.add('rf-led-tx');
+        }
+
+        triggerArrival() {
+          this.blinkRfLed();
+          this.state.delayActive = false;
+          this.state.arrivingActive = true;
+          this.audio.playArrivalChime();
+          const activePlat = this.state.direction === 'south' ? 'Platform B' : 'Platform A';
+          this.showToast(`Teacher Remote: ${activePlat} set to "Arr / Arriving Now"`, 'bg-emerald-400');
+        }
+
+        triggerDoorClosing() {
+          this.blinkRfLed();
+          this.state.doorWarningUntil = performance.now() + 3600;
+          this.audio.playDoorClosingChime();
+          const activePlat = this.state.direction === 'south' ? 'Platform B' : 'Platform A';
+          this.showToast(`Teacher Remote: ${activePlat} Doors Closing Warning Active`, 'bg-rose-500');
+        }
+
+        triggerDelayNotice() {
+          this.blinkRfLed();
+          this.state.delayActive = !this.state.delayActive;
+          this.audio.playDelayAlert();
+          this.showToast(
+            this.state.delayActive ? 'Teacher Remote: Amber Train Service Delay Notice Active' : 'Delay Notice Cleared',
+            this.state.delayActive ? 'bg-amber-400' : 'bg-emerald-400'
+          );
+        }
+
+        resetAll() {
+          this.blinkRfLed();
+          this.audio.playClick(740);
+          this.state.selectedStationIndex = null;
+          this.state.direction = null;
+          this.state.arrivingActive = false;
+          this.state.delayActive = false;
+          this.state.doorWarningUntil = 0;
+          this.showToast('All Displays Reset to Default Standby', 'bg-slate-400');
+        }
+
+        showToast(msg, dotClass = 'bg-emerald-400') {
+          const toast = document.getElementById('status-toast');
+          document.getElementById('toast-text').textContent = msg;
+          document.getElementById('toast-dot').className = `w-2.5 h-2.5 rounded-full ${dotClass} shrink-0`;
+
+          toast.classList.remove('opacity-0', '-translate-y-2');
+          toast.classList.add('opacity-100', 'translate-y-0');
+
+          if (this.toastTimer) clearTimeout(this.toastTimer);
+          this.toastTimer = setTimeout(() => {
+            toast.classList.remove('opacity-100', 'translate-y-0');
+            toast.classList.add('opacity-0', '-translate-y-2');
+          }, 3000);
+        }
+
+        /* ---------------- Event Bindings ---------------- */
+
+        bindHUD() {
+          // 4 Camera Preset Buttons
+          document.querySelectorAll('.cam-btn').forEach((btn) => {
+            btn.addEventListener('click', () => {
+              this.audio.playClick(880);
+              this.camCtrl.flyTo(btn.dataset.view);
+              document.querySelectorAll('.cam-btn').forEach((b) => {
+                const active = b === btn;
+                b.className = active
+                  ? 'cam-btn px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer bg-[#d42e12] text-white shadow-sm'
+                  : 'cam-btn px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer text-slate-200 hover:bg-slate-700/60';
+              });
+            });
+          });
+
+          // Bottom Quick Student Action Pills
+          document.getElementById('btn-select-woodlands').addEventListener('click', () => this.selectStation(6)); // NS9 Woodlands
+          document.getElementById('btn-select-orchard').addEventListener('click', () => this.selectStation(19));  // NS22 Orchard
+
+          // Teacher Pocket Remote Buttons
+          document.getElementById('rf-btn-arr').addEventListener('click', () => this.triggerArrival());
+          document.getElementById('rf-btn-doors').addEventListener('click', () => this.triggerDoorClosing());
+          document.getElementById('rf-btn-delay').addEventListener('click', () => this.triggerDelayNotice());
+          document.getElementById('rf-btn-reset').addEventListener('click', () => this.resetAll());
+
+          // Audio Mute/Unmute Toggle
+          document.getElementById('btn-audio').addEventListener('click', () => {
+            const muted = this.audio.toggleMute();
+            document.getElementById('icon-audio-on').classList.toggle('hidden', muted);
+            document.getElementById('icon-audio-off').classList.toggle('hidden', !muted);
+            this.showToast(muted ? 'Audio Muted' : 'Audio Enabled', muted ? 'bg-rose-400' : 'bg-emerald-400');
+          });
+
+          window.addEventListener('resize', () => this.onResize());
+        }
+
+        /** UV-based 3D Raycasting on the 48" Touchscreen Map for all 26 NSL stations */
+        findStationAtUV(uv) {
+          const cx = uv.x * MAP_W;
+          const cy = (1 - uv.y) * MAP_H;
+          let closest = null;
+          let bestDist = 66; // Generous 66px touch hit radius on 2048x1152 canvas
+
+          for (let i = 0; i < NSL_STATIONS.length; i++) {
+            const st = NSL_STATIONS[i];
+            const d = Math.hypot(cx - st.x, cy - st.y);
+            if (d < bestDist) {
+              bestDist = d;
+              closest = i;
+            }
+          }
+          return closest;
+        }
+
+        bindMapRaycasting() {
+          const dom = this.renderer.domElement;
+          const mapMesh = this.builder.refs.mapTV.mapMesh;
+
+          dom.addEventListener('pointerdown', (e) => {
+            this.downPos = { x: e.clientX, y: e.clientY };
+          });
+
+          dom.addEventListener('pointermove', (e) => {
+            const rect = dom.getBoundingClientRect();
+            this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+            this.raycaster.setFromCamera(this.pointer, this.camera);
+            const hits = this.raycaster.intersectObject(mapMesh, false);
+
+            if (hits.length > 0 && hits[0].uv) {
+              const stIdx = this.findStationAtUV(hits[0].uv);
+              this.state.hoveredStationIndex = stIdx;
+
+              if (stIdx !== null) {
+                const st = NSL_STATIONS[stIdx];
+                dom.style.cursor = 'pointer';
+                this.tooltip.textContent = st.isOrigin
+                  ? `${st.code} ${st.name} (Origin — You Are Here)`
+                  : `Tap Destination: ${st.code} ${st.name}`;
+                this.tooltip.style.left = `${e.clientX}px`;
+                this.tooltip.style.top = `${e.clientY}px`;
+                this.tooltip.style.opacity = '1';
+                return;
+              }
+            } else {
+              this.state.hoveredStationIndex = null;
+            }
+
+            dom.style.cursor = 'grab';
+            this.tooltip.style.opacity = '0';
+          });
+
+          dom.addEventListener('pointerleave', () => {
+            this.state.hoveredStationIndex = null;
+            this.tooltip.style.opacity = '0';
+          });
+
+          dom.addEventListener('pointerup', (e) => {
+            if (Math.hypot(e.clientX - this.downPos.x, e.clientY - this.downPos.y) > 6) return;
+
+            const rect = dom.getBoundingClientRect();
+            this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+            this.raycaster.setFromCamera(this.pointer, this.camera);
+            const hits = this.raycaster.intersectObject(mapMesh, false);
+            if (hits.length > 0 && hits[0].uv) {
+              const stIdx = this.findStationAtUV(hits[0].uv);
+              if (stIdx !== null) {
+                this.selectStation(stIdx);
+              }
+            }
+          });
+        }
+
+        onResize() {
+          const w = this.container.clientWidth || window.innerWidth;
+          const h = this.container.clientHeight || window.innerHeight;
+          this.camera.aspect = w / h;
+          this.camera.updateProjectionMatrix();
+          this.renderer.setSize(w, h);
+        }
+
+        /* ---------------- Real-Time Visual & Emissive Halo Updates ---------------- */
+
+        updateHalos(now, timeSec) {
+          const flashFast = Math.sin(timeSec * 12) > 0;
+
+          const updateOne = (pidsRef, isA) => {
+            const isCorrect =
+              (isA && this.state.direction === 'north') ||
+              (!isA && this.state.direction === 'south');
+            const isTargetForRemote =
+              this.state.direction === null ? isA : isCorrect;
+            const doorWarn = this.state.doorWarningUntil > now && isTargetForRemote;
+
+            if (doorWarn) {
+              const col = flashFast ? 0xef4444 : 0x450a0a;
+              pidsRef.haloMat.color.setHex(col);
+              pidsRef.haloMat.emissive.setHex(0xef4444);
+              pidsRef.haloMat.emissiveIntensity = flashFast ? 2.6 : 0.25;
+              pidsRef.haloLight.color.setHex(0xef4444);
+              pidsRef.haloLight.intensity = flashFast ? 0.9 : 0.1;
+            } else if (this.state.delayActive) {
+              pidsRef.haloMat.color.setHex(0xf59e0b);
+              pidsRef.haloMat.emissive.setHex(0xf59e0b);
+              pidsRef.haloMat.emissiveIntensity = 1.4;
+              pidsRef.haloLight.color.setHex(0xf59e0b);
+              pidsRef.haloLight.intensity = 0.5;
+            } else if (isCorrect) {
+              const pulse = 1.4 + 0.5 * Math.sin(timeSec * 4.5);
+              pidsRef.haloMat.color.setHex(0x10b981);
+              pidsRef.haloMat.emissive.setHex(0x10b981);
+              pidsRef.haloMat.emissiveIntensity = pulse;
+              pidsRef.haloLight.color.setHex(0x10b981);
+              pidsRef.haloLight.intensity = 0.65;
+            } else {
+              pidsRef.haloMat.color.setHex(0x1e293b);
+              pidsRef.haloMat.emissive.setHex(0x000000);
+              pidsRef.haloMat.emissiveIntensity = 0.0;
+              pidsRef.haloLight.intensity = 0.0;
+            }
+          };
+
+          updateOne(this.builder.refs.pidsA, true);
+          updateOne(this.builder.refs.pidsB, false);
+
+          // Subtle breathing pulse on concealed Mini-PC blue power LED
+          if (this.builder.refs.miniPcLed) {
+            this.builder.refs.miniPcLed.emissiveIntensity = 1.6 + 0.6 * Math.sin(timeSec * 3.0);
+          }
+        }
+
+        start() {
+          let lastCanvasTick = 0;
+          const animate = (now) => {
+            requestAnimationFrame(animate);
+            const timeSec = now * 0.001;
+
+            this.camCtrl.update(now);
+            this.updateHalos(now, timeSec);
+
+            // Refresh dynamic high-res CanvasTextures smoothly (~24 FPS for crisp animated route dashes & flashing alerts)
+            if (now - lastCanvasTick > 42) {
+              ScreenRenderers.renderMap(this.builder.refs.mapTV.mapCanvas, this.state, timeSec);
+              ScreenRenderers.renderPids(this.builder.refs.pidsA.pidsCanvas, 'A', this.state, timeSec);
+              ScreenRenderers.renderPids(this.builder.refs.pidsB.pidsCanvas, 'B', this.state, timeSec);
+              lastCanvasTick = now;
+            }
+
+            this.renderer.render(this.scene, this.camera);
+          };
+          requestAnimationFrame(animate);
+        }
+      }
+
+      /* =========================================================================
+       * 7. BOOTSTRAP ON WINDOW LOAD
+       * ========================================================================= */
+      window.onload = function () {
+        try {
+          const app = new PlatformPidsApp();
+          app.start();
+        } catch (err) {
+          console.error('Failed to initialize Module 2 Platform PIDS 3D Simulation:', err);
+        }
+      };
+    })();
+  </script>
+</body>
+</html>

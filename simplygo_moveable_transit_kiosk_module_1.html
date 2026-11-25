@@ -1,0 +1,2478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>SimplyGo Moveable Transit Kiosk (Module 1) — Interactive 3D Simulation</title>
+
+  <!-- Fonts & Tailwind CSS -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Three.js r128 & OrbitControls -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #0b121e;
+      color: #f8fafc;
+      user-select: none;
+    }
+
+    #canvas-container {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 1;
+    }
+
+    #canvas-container canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      outline: none;
+    }
+
+    /* Translucent Glassmorphism HUD Surfaces */
+    .glass-panel {
+      background: rgba(15, 23, 36, 0.78);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      box-shadow: 0 12px 34px -8px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    /* Active Step Pulse Ring */
+    @keyframes stepPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(0, 150, 136, 0.55); }
+      50% { box-shadow: 0 0 0 6px rgba(0, 150, 136, 0); }
+    }
+    .step-active-glow {
+      animation: stepPulse 1.8s infinite ease-in-out;
+    }
+
+    /* Tooltip styling for raycast hover */
+    #hover-tooltip {
+      position: fixed;
+      z-index: 30;
+      pointer-events: none;
+      transform: translate(-50%, -135%);
+      transition: opacity 0.15s ease;
+    }
+  </style>
+</head>
+<body>
+  <!-- Full-Viewport 3D WebGL Container -->
+  <div id="canvas-container" aria-label="3D SimplyGo Moveable Transit Kiosk Simulation"></div>
+
+  <!-- 3D Raycast Hover Tooltip -->
+  <div id="hover-tooltip" class="glass-panel rounded-xl px-3 py-1.5 text-xs font-semibold text-teal-200 opacity-0 whitespace-nowrap border-teal-400/40">
+    Interactive Part
+  </div>
+
+  <!-- Top HUD: Branding, Utility Buttons & 4 Quick-View Camera Presets -->
+  <header class="fixed top-3 left-3 right-3 z-20 pointer-events-none flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2.5">
+    <!-- Title Card -->
+    <div class="glass-panel pointer-events-auto rounded-2xl px-4 py-2.5 flex items-center justify-between gap-4">
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-[#009688] to-[#00695c] flex items-center justify-center border border-teal-300/40 shadow-inner shrink-0">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <rect x="4" y="2" width="16" height="20" rx="3" />
+            <rect x="7" y="6" width="10" height="6" rx="1" />
+            <path d="M8 16h8M10 19h4" stroke-linecap="round" />
+          </svg>
+        </div>
+        <div class="min-w-0">
+          <h1 class="text-sm sm:text-base font-bold tracking-tight text-white truncate">
+            SimplyGo Moveable Transit Kiosk
+          </h1>
+          <div class="flex items-center gap-2 text-[11px] text-slate-300">
+            <span class="inline-block w-2 h-2 rounded-full bg-teal-400"></span>
+            <span class="truncate">Module 1 &bull; Click 3D parts or use step controls</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Utility Controls: Audio Mute & Reset -->
+      <div class="flex items-center gap-1.5 shrink-0">
+        <button id="btn-reset" title="Reset Simulation"
+          class="px-2.5 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 border border-slate-600/40 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M3 3v5h5" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span class="hidden sm:inline">Reset</span>
+        </button>
+        <button id="btn-audio" title="Mute / Unmute Sound"
+          class="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-teal-300 border border-slate-600/40 transition-colors cursor-pointer">
+          <svg id="icon-sound-on" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M11 5L6 9H2v6h4l5 4V5z" />
+            <path d="M15.54 8.46a5 5 0 010 7.07M19.07 4.93a10 10 0 010 14.14" stroke-linecap="round" />
+          </svg>
+          <svg id="icon-sound-off" class="w-4 h-4 hidden text-rose-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M11 5L6 9H2v6h4l5 4V5z" />
+            <path d="M23 9l-6 6M17 9l6 6" stroke-linecap="round" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- 4 Preset Quick-View Camera Buttons -->
+    <nav class="glass-panel pointer-events-auto rounded-2xl p-1.5 flex items-center gap-1 overflow-x-auto no-scrollbar" aria-label="Camera Presets">
+      <button data-view="front" class="cam-btn px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer bg-[#00897B] text-white shadow-sm">
+        Front Kiosk View
+      </button>
+      <button data-view="screen27" class="cam-btn px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer text-slate-200 hover:bg-slate-700/60">
+        Zoom 27&quot; Screen
+      </button>
+      <button data-view="numpadSlot" class="cam-btn px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer text-slate-200 hover:bg-slate-700/60">
+        Zoom 13&quot; Numpad &amp; Slot
+      </button>
+      <button data-view="mobility" class="cam-btn px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer text-slate-200 hover:bg-slate-700/60">
+        Side Mobility &amp; Casters
+      </button>
+      <button data-view="rearThermal" class="cam-btn px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer text-slate-200 hover:bg-slate-700/60">
+        Rear Thermal &amp; Filter
+      </button>
+    </nav>
+  </header>
+
+  <!-- Live Status Toast Notification -->
+  <div id="toast" class="fixed top-28 sm:top-24 left-1/2 -translate-x-1/2 z-30 glass-panel rounded-2xl px-4 py-2.5 text-xs sm:text-sm font-medium text-white flex items-center gap-2.5 transition-all duration-300 opacity-0 -translate-y-2 pointer-events-none border-teal-400/40">
+    <span id="toast-dot" class="w-2.5 h-2.5 rounded-full bg-teal-400 shrink-0"></span>
+    <span id="toast-msg">Ready for training simulation</span>
+  </div>
+
+  <!-- Bottom Floating Step-by-Step Interactive User Flow HUD -->
+  <footer class="fixed bottom-3 left-3 right-3 z-20 pointer-events-none flex flex-col items-center gap-2">
+    <!-- Current Prompt Banner -->
+    <div id="flow-banner" class="glass-panel pointer-events-auto rounded-xl px-4 py-1.5 text-xs text-slate-200 flex items-center gap-2">
+      <span class="font-bold text-teal-300 uppercase tracking-wider text-[10px]">Current Step</span>
+      <span class="text-slate-500">|</span>
+      <span id="flow-instruction" class="font-medium text-white">Place your SimplyGo transit card flat on the NFC cradle tray.</span>
+    </div>
+
+    <!-- Step Action Buttons -->
+    <div class="glass-panel pointer-events-auto rounded-2xl p-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar max-w-full">
+      <button id="btn-step-1" data-step="1"
+        class="step-btn step-active-glow px-3.5 py-2.5 rounded-xl text-xs font-semibold whitespace-nowrap flex items-center gap-2 bg-[#00897B] hover:bg-[#009688] text-white border border-teal-300/40 transition-all cursor-pointer">
+        <span class="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-[11px] font-bold">1</span>
+        <span>Place Card on Tray</span>
+      </button>
+
+      <button id="btn-step-2" data-step="2"
+        class="step-btn px-3.5 py-2.5 rounded-xl text-xs font-semibold whitespace-nowrap flex items-center gap-2 bg-slate-800/75 hover:bg-slate-700/80 text-slate-300 border border-slate-600/40 transition-all cursor-pointer">
+        <span class="w-5 h-5 rounded-full bg-slate-700 flex items-center justify-center text-[11px] font-bold">2</span>
+        <span>Select Top-Up Mode</span>
+      </button>
+
+      <button id="btn-step-3" data-step="3"
+        class="step-btn px-3.5 py-2.5 rounded-xl text-xs font-semibold whitespace-nowrap flex items-center gap-2 bg-slate-800/75 hover:bg-slate-700/80 text-slate-300 border border-slate-600/40 transition-all cursor-pointer">
+        <span class="w-5 h-5 rounded-full bg-slate-700 flex items-center justify-center text-[11px] font-bold">3</span>
+        <span>Key-in +$10</span>
+      </button>
+
+      <button id="btn-step-4" data-step="4"
+        class="step-btn px-3.5 py-2.5 rounded-xl text-xs font-semibold whitespace-nowrap flex items-center gap-2 bg-slate-800/75 hover:bg-slate-700/80 text-slate-300 border border-slate-600/40 transition-all cursor-pointer">
+        <span class="w-5 h-5 rounded-full bg-slate-700 flex items-center justify-center text-[11px] font-bold">4</span>
+        <span>Insert Cash ($10)</span>
+      </button>
+
+      <button id="btn-step-5" data-step="5"
+        class="step-btn px-3.5 py-2.5 rounded-xl text-xs font-semibold whitespace-nowrap flex items-center gap-2 bg-slate-800/75 hover:bg-slate-700/80 text-slate-300 border border-slate-600/40 transition-all cursor-pointer">
+        <span class="w-5 h-5 rounded-full bg-slate-700 flex items-center justify-center text-[11px] font-bold">5</span>
+        <span>Take Card</span>
+      </button>
+    </div>
+  </footer>
+
+  <!-- Modular 3D Application Script -->
+  <script>
+    (function () {
+      'use strict';
+
+      /* =========================================================================
+       * 1. CONSTANTS, DIMENSIONS & CAMERA PRESETS
+       * ========================================================================= */
+      const PALETTE = {
+        tealPrimary: 0x008b82,
+        tealBright: 0x009688,
+        tealDark: 0x00695c,
+        silverBody: 0xc8ced6,
+        silverBay: 0xd8dde3,
+        silverInset: 0xa6afb9,
+        basePlinth: 0x68707a,
+        nfcBlue: 0x1967b8,
+        nfcBlueDark: 0x104a88,
+        slotNavy: 0x14263b,
+        charcoal: 0x242a32,
+        charcoalLight: 0x353d47,
+        bezelBlack: 0x13171d,
+        steel: 0xcbd5e1,
+        chrome: 0xe2e8f0,
+        emeraldLed: 0x10b981,
+        brakeRed: 0xdc2626
+      };
+
+      // Proportional freestanding kiosk dimensions (approx. 1.04m W x 0.68m D x 1.78m H)
+      const KIOSK = {
+        width: 1.04,
+        depth: 0.68,
+        height: 1.78,
+        skirtClearance: 0.065, // Raised 65mm above ground Y=0 on heavy-duty casters
+        frontZ: 0.34
+      };
+
+      // 5 Preset Camera Views with smooth cubic ease-in-out tweening
+      const CAMERA_PRESETS = {
+        front: {
+          pos: new THREE.Vector3(0.0, 1.22, 2.68),
+          target: new THREE.Vector3(0.0, 0.98, 0.05)
+        },
+        screen27: {
+          pos: new THREE.Vector3(-0.18, 1.25, 1.28),
+          target: new THREE.Vector3(-0.18, 1.21, 0.32)
+        },
+        numpadSlot: {
+          pos: new THREE.Vector3(0.32, 1.28, 1.22),
+          target: new THREE.Vector3(0.29, 1.15, 0.36)
+        },
+        mobility: {
+          pos: new THREE.Vector3(1.92, 0.86, 1.38),
+          target: new THREE.Vector3(0.0, 0.62, -0.02)
+        },
+        rearThermal: {
+          pos: new THREE.Vector3(-1.35, 1.12, -2.05),
+          target: new THREE.Vector3(0.0, 0.72, -0.32)
+        }
+      };
+
+      // Simulation Flow States
+      const FLOW = {
+        IDLE: 0,
+        CARD_PLACED: 1,
+        TOPUP_SELECTED: 2,
+        AMOUNT_ENTERED: 3,
+        CASH_INSERTING: 3.5,
+        TOPUP_SUCCESS: 4,
+        COMPLETED: 5
+      };
+
+      /* =========================================================================
+       * 2. WEB AUDIO API SYNTHESIZER (100% Offline, No External Audio Files)
+       * ========================================================================= */
+      class KioskAudioEngine {
+        constructor() {
+          this.ctx = null;
+          this.muted = false;
+        }
+
+        ensureContext() {
+          if (this.muted) return null;
+          try {
+            if (!this.ctx) {
+              const AudioCtx = window.AudioContext || window.webkitAudioContext;
+              if (!AudioCtx) return null;
+              this.ctx = new AudioCtx();
+            }
+            if (this.ctx.state === 'suspended') {
+              this.ctx.resume();
+            }
+            return this.ctx;
+          } catch (err) {
+            console.warn('Web Audio API unavailable:', err);
+            return null;
+          }
+        }
+
+        toggleMute() {
+          this.muted = !this.muted;
+          return this.muted;
+        }
+
+        /** Step 1: Authentic high-pitch Singapore MRT card detection beep (~1850Hz) */
+        playCardDetectBeep() {
+          const ctx = this.ensureContext();
+          if (!ctx) return;
+          const now = ctx.currentTime;
+
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(1850, now);
+
+          gain.gain.setValueAtTime(0.001, now);
+          gain.gain.linearRampToValueAtTime(0.18, now + 0.008);
+          gain.gain.setValueAtTime(0.18, now + 0.095);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.15);
+        }
+
+        /** Step 2 & 3: Soft touchscreen tap click */
+        playSoftClick(pitch = 950) {
+          const ctx = this.ensureContext();
+          if (!ctx) return;
+          const now = ctx.currentTime;
+
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(pitch, now);
+          osc.frequency.exponentialRampToValueAtTime(pitch * 1.35, now + 0.045);
+
+          gain.gain.setValueAtTime(0.001, now);
+          gain.gain.linearRampToValueAtTime(0.12, now + 0.006);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.065);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.075);
+        }
+
+        /** Step 4: Mechanical roller intake rustle (filtered noise + low motor hum) + cash receipt chime */
+        playCashIntakeSequence() {
+          const ctx = this.ensureContext();
+          if (!ctx) return;
+          const now = ctx.currentTime;
+          const intakeDur = 1.05;
+
+          // 1. Paper rustle via bandpass-filtered white noise
+          const bufferSize = Math.floor(ctx.sampleRate * intakeDur);
+          const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+          const data = noiseBuffer.getChannelData(0);
+          for (let i = 0; i < bufferSize; i++) {
+            data[i] = (Math.random() * 2 - 1) * 0.6;
+          }
+
+          const noise = ctx.createBufferSource();
+          noise.buffer = noiseBuffer;
+
+          const bandpass = ctx.createBiquadFilter();
+          bandpass.type = 'bandpass';
+          bandpass.frequency.setValueAtTime(1400, now);
+          bandpass.frequency.linearRampToValueAtTime(2200, now + intakeDur);
+          bandpass.Q.value = 1.8;
+
+          const noiseGain = ctx.createGain();
+          noiseGain.gain.setValueAtTime(0.001, now);
+          noiseGain.gain.linearRampToValueAtTime(0.14, now + 0.08);
+          noiseGain.gain.setValueAtTime(0.12, now + intakeDur - 0.15);
+          noiseGain.gain.exponentialRampToValueAtTime(0.001, now + intakeDur);
+
+          noise.connect(bandpass);
+          bandpass.connect(noiseGain);
+          noiseGain.connect(ctx.destination);
+          noise.start(now);
+          noise.stop(now + intakeDur);
+
+          // 2. Low mechanical roller motor whir
+          const motorOsc = ctx.createOscillator();
+          const motorGain = ctx.createGain();
+          motorOsc.type = 'sawtooth';
+          motorOsc.frequency.setValueAtTime(135, now);
+          motorOsc.frequency.linearRampToValueAtTime(155, now + intakeDur * 0.5);
+          motorOsc.frequency.linearRampToValueAtTime(125, now + intakeDur);
+
+          const lowpass = ctx.createBiquadFilter();
+          lowpass.type = 'lowpass';
+          lowpass.frequency.value = 340;
+
+          motorGain.gain.setValueAtTime(0.001, now);
+          motorGain.gain.linearRampToValueAtTime(0.07, now + 0.08);
+          motorGain.gain.setValueAtTime(0.07, now + intakeDur - 0.12);
+          motorGain.gain.exponentialRampToValueAtTime(0.001, now + intakeDur);
+
+          motorOsc.connect(lowpass);
+          lowpass.connect(motorGain);
+          motorGain.connect(ctx.destination);
+          motorOsc.start(now);
+          motorOsc.stop(now + intakeDur);
+
+          // 3. Positive cash-receipt chime right after roller stops
+          const chimeStart = now + intakeDur + 0.05;
+          const osc = ctx.createOscillator();
+          const g = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(1318.5, chimeStart); // E6
+          g.gain.setValueAtTime(0.001, chimeStart);
+          g.gain.linearRampToValueAtTime(0.15, chimeStart + 0.015);
+          g.gain.exponentialRampToValueAtTime(0.001, chimeStart + 0.25);
+          osc.connect(g);
+          g.connect(ctx.destination);
+          osc.start(chimeStart);
+          osc.stop(chimeStart + 0.27);
+        }
+
+        /** Step 5: Authentic two-tone Singapore MRT success/departure chime */
+        playSuccessChime() {
+          const ctx = this.ensureContext();
+          if (!ctx) return;
+          const now = ctx.currentTime;
+          const notes = [
+            { freq: 783.99, start: 0.0, dur: 0.26 },   // G5
+            { freq: 1046.50, start: 0.22, dur: 0.45 }  // C6
+          ];
+          notes.forEach(({ freq, start, dur }) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, now + start);
+            gain.gain.setValueAtTime(0.001, now + start);
+            gain.gain.linearRampToValueAtTime(0.17, now + start + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + start + dur);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now + start);
+            osc.stop(now + start + dur + 0.02);
+          });
+        }
+      }
+
+      /* =========================================================================
+       * 3. PROCEDURAL CANVAS TEXTURE GENERATORS
+       * ========================================================================= */
+      const CanvasTextures = {
+        /** Architectural MRT Concourse Floor Tile Grid */
+        createFloorTexture() {
+          const c = document.createElement('canvas');
+          c.width = 1024;
+          c.height = 1024;
+          const ctx = c.getContext('2d');
+
+          ctx.fillStyle = '#252d3a';
+          ctx.fillRect(0, 0, 1024, 1024);
+
+          // Subtle architectural granite tile lines
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.12)';
+          ctx.lineWidth = 2;
+          for (let i = 0; i <= 1024; i += 128) {
+            ctx.beginPath();
+            ctx.moveTo(i, 0);
+            ctx.lineTo(i, 1024);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(0, i);
+            ctx.lineTo(1024, i);
+            ctx.stroke();
+          }
+
+          // Micro speckle for realistic terrazzo concourse floor
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
+          for (let i = 0; i < 650; i++) {
+            ctx.fillRect(Math.random() * 1024, Math.random() * 1024, 2, 2);
+          }
+
+          const tex = new THREE.CanvasTexture(c);
+          tex.wrapS = THREE.RepeatWrapping;
+          tex.wrapT = THREE.RepeatWrapping;
+          tex.repeat.set(7, 7);
+          tex.anisotropy = 8;
+          return tex;
+        },
+
+        /** Backlit Header Plate: "SimplyGo / Top-Up Kiosk" */
+        createHeaderPlateTexture() {
+          const c = document.createElement('canvas');
+          c.width = 1024;
+          c.height = 256;
+          const ctx = c.getContext('2d');
+
+          // Translucent white-teal backlit gradient
+          const grad = ctx.createLinearGradient(0, 0, 1024, 256);
+          grad.addColorStop(0, '#e0f7f4');
+          grad.addColorStop(0.5, '#ffffff');
+          grad.addColorStop(1, '#d1f2eb');
+          ctx.fillStyle = grad;
+          ctx.fillRect(0, 0, 1024, 256);
+
+          // Left SimplyGo emblem badge
+          ctx.fillStyle = '#00897b';
+          ctx.beginPath();
+          ctx.roundRect(42, 46, 164, 164, 34);
+          ctx.fill();
+
+          // Stylized white contactless wave icon inside badge
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 10;
+          ctx.lineCap = 'round';
+          [26, 46, 66].forEach((r) => {
+            ctx.beginPath();
+            ctx.arc(112, 128, r, -0.7, 0.7);
+            ctx.stroke();
+          });
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(96, 128, 10, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Main Title
+          ctx.fillStyle = '#00695c';
+          ctx.font = '800 76px Inter, sans-serif';
+          ctx.fillText('SimplyGo', 236, 128);
+
+          // Divider slash & subtitle
+          ctx.fillStyle = '#0f172a';
+          ctx.font = '700 44px Inter, sans-serif';
+          ctx.fillText('Top-Up Kiosk', 238, 188);
+
+          // Right accent pill
+          ctx.fillStyle = '#00897b';
+          ctx.beginPath();
+          ctx.roundRect(755, 92, 224, 72, 36);
+          ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '700 26px Inter, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('MRT • BUS', 867, 138);
+
+          const tex = new THREE.CanvasTexture(c);
+          tex.anisotropy = 4;
+          return tex;
+        },
+
+        /** Banknote Slot Decal Label: "Insert Notes Face Up (SGD 2, 5, 10, 50)" */
+        createBanknoteLabelTexture() {
+          const c = document.createElement('canvas');
+          c.width = 512;
+          c.height = 140;
+          const ctx = c.getContext('2d');
+
+          ctx.fillStyle = '#14263b';
+          ctx.fillRect(0, 0, 512, 140);
+
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '800 32px Inter, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('Insert Notes Face Up', 256, 62);
+
+          ctx.fillStyle = '#7dd3fc';
+          ctx.font = '700 24px Inter, sans-serif';
+          ctx.fillText('(SGD 2, 5, 10, 50)', 256, 108);
+
+          const tex = new THREE.CanvasTexture(c);
+          tex.anisotropy = 4;
+          return tex;
+        },
+
+        /** Recessed Blue NFC Card Cradle Plate: White ((( • ))) on left, Card Zone on right, "Place Card Flat" */
+        createNfcTrayTexture() {
+          const c = document.createElement('canvas');
+          c.width = 640;
+          c.height = 280;
+          const ctx = c.getContext('2d');
+
+          // Vibrant transit blue recessed cup interior (#1967B8)
+          const grad = ctx.createLinearGradient(0, 0, 640, 280);
+          grad.addColorStop(0, '#1d72c9');
+          grad.addColorStop(1, '#14559a');
+          ctx.fillStyle = grad;
+          ctx.fillRect(0, 0, 640, 280);
+
+          // Dark blue inner recessed border
+          ctx.strokeStyle = '#0e3c6e';
+          ctx.lineWidth = 10;
+          ctx.beginPath();
+          ctx.roundRect(10, 10, 620, 260, 28);
+          ctx.stroke();
+
+          // Left Side: White Contactless Wave Icon ((( • )))
+          const cx = 172;
+          const cy = 122;
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(cx, cy, 13, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 9;
+          ctx.lineCap = 'round';
+          [32, 54, 76].forEach((r) => {
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, -0.65, 0.65);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, Math.PI - 0.65, Math.PI + 0.65);
+            ctx.stroke();
+          });
+
+          // Right Side: Recessed Card Placement Guide Outline
+          ctx.fillStyle = 'rgba(12, 42, 78, 0.35)';
+          ctx.beginPath();
+          ctx.roundRect(336, 36, 256, 166, 16);
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.72)';
+          ctx.lineWidth = 4;
+          ctx.stroke();
+
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.82)';
+          ctx.font = '700 22px Inter, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('TRANSIT CARD', 464, 126);
+
+          // Bottom Center Label: "Place Card Flat"
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '800 26px Inter, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('Place Card Flat', 320, 246);
+
+          const tex = new THREE.CanvasTexture(c);
+          tex.anisotropy = 4;
+          return tex;
+        },
+
+        /** Singapore SimplyGo / EZ-Link Concession Transit Card Artwork (85mm x 54mm ratio) */
+        createTransitCardTexture() {
+          const c = document.createElement('canvas');
+          c.width = 512;
+          c.height = 325;
+          const ctx = c.getContext('2d');
+
+          // Vibrant teal & purple Singapore transit card gradient
+          const grad = ctx.createLinearGradient(0, 0, 512, 325);
+          grad.addColorStop(0, '#00897b');
+          grad.addColorStop(0.65, '#00695c');
+          grad.addColorStop(1, '#1e3a5f');
+          ctx.fillStyle = grad;
+          ctx.fillRect(0, 0, 512, 325);
+
+          // Decorative curved wave ribbon
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.14)';
+          ctx.beginPath();
+          ctx.moveTo(0, 210);
+          ctx.bezierCurveTo(170, 140, 320, 270, 512, 165);
+          ctx.lineTo(512, 325);
+          ctx.lineTo(0, 325);
+          ctx.closePath();
+          ctx.fill();
+
+          // Top branding
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '800 40px Inter, sans-serif';
+          ctx.fillText('SimplyGo', 30, 68);
+
+          ctx.fillStyle = '#fde047';
+          ctx.font = '700 22px Inter, sans-serif';
+          ctx.fillText('EZ-Link • Transit Concession', 30, 102);
+
+          // Gold contactless chip graphic
+          ctx.fillStyle = '#fbbf24';
+          ctx.beginPath();
+          ctx.roundRect(36, 148, 68, 52, 8);
+          ctx.fill();
+          ctx.strokeStyle = '#92400e';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(48, 160, 44, 28);
+
+          // Card Serial
+          ctx.fillStyle = 'rgba(255,255,255,0.85)';
+          ctx.font = '600 22px monospace';
+          ctx.fillText('8001 4492 1039 8821', 30, 284);
+
+          const tex = new THREE.CanvasTexture(c);
+          tex.anisotropy = 4;
+          return tex;
+        },
+
+        /** Toy SGD $10 Banknote Artwork (Singapore Red-Toned Polymer $10 Note) */
+        createSgd10BanknoteTexture() {
+          const c = document.createElement('canvas');
+          c.width = 512;
+          c.height = 256;
+          const ctx = c.getContext('2d');
+
+          // Classic Singapore $10 vibrant red/coral base
+          const grad = ctx.createLinearGradient(0, 0, 512, 256);
+          grad.addColorStop(0, '#dc2626');
+          grad.addColorStop(0.5, '#ef4444');
+          grad.addColorStop(1, '#b91c1c');
+          ctx.fillStyle = grad;
+          ctx.fillRect(0, 0, 512, 256);
+
+          // Fine security border
+          ctx.strokeStyle = 'rgba(254, 226, 226, 0.75)';
+          ctx.lineWidth = 6;
+          ctx.strokeRect(14, 14, 484, 228);
+
+          // Left clear polymer security window hint
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.28)';
+          ctx.beginPath();
+          ctx.roundRect(36, 46, 84, 164, 14);
+          ctx.fill();
+
+          // Center "SINGAPORE" & "TEN DOLLARS"
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '800 30px Inter, sans-serif';
+          ctx.fillText('SINGAPORE', 148, 66);
+
+          ctx.fillStyle = '#fef08a';
+          ctx.font = '900 72px Inter, sans-serif';
+          ctx.fillText('$10', 148, 152);
+
+          ctx.fillStyle = '#fee2e2';
+          ctx.font = '700 20px Inter, sans-serif';
+          ctx.fillText('TEN DOLLARS • TRAINING NOTE', 148, 200);
+
+          // Right portrait medallion motif
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.22)';
+          ctx.beginPath();
+          ctx.arc(426, 128, 52, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '800 36px Inter, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('10', 426, 142);
+
+          const tex = new THREE.CanvasTexture(c);
+          tex.anisotropy = 4;
+          return tex;
+        },
+
+        /** Dynamic 27-Inch Landscape Touchscreen Canvas (1024x576, 16:9) */
+        createMain27Screen() {
+          const canvas = document.createElement('canvas');
+          canvas.width = 1024;
+          canvas.height = 576;
+          const texture = new THREE.CanvasTexture(canvas);
+          texture.anisotropy = 8;
+          return { canvas, ctx: canvas.getContext('2d'), texture };
+        },
+
+        renderMain27Screen(screenObj, state) {
+          const { canvas, ctx, texture } = screenObj;
+          const W = canvas.width;
+          const H = canvas.height;
+
+          // Clean modern light-teal/white SimplyGo UI backdrop
+          ctx.fillStyle = '#f1f5f9';
+          ctx.fillRect(0, 0, W, H);
+
+          // Top Brand Header Bar
+          ctx.fillStyle = '#00897b';
+          ctx.fillRect(0, 0, W, 92);
+
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '800 34px Inter, sans-serif';
+          ctx.textAlign = 'left';
+          ctx.fillText('SimplyGo Transit Kiosk', 36, 58);
+
+          // Language pills top-right
+          const langs = ['English', '中文', 'Melayu', 'தமிழ்'];
+          langs.forEach((lang, i) => {
+            const x = 620 + i * 96;
+            ctx.fillStyle = i === 0 ? '#ffffff' : 'rgba(255,255,255,0.2)';
+            ctx.beginPath();
+            ctx.roundRect(x, 24, 88, 44, 10);
+            ctx.fill();
+            ctx.fillStyle = i === 0 ? '#00695c' : '#ffffff';
+            ctx.font = '700 17px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(lang, x + 44, 52);
+          });
+
+          ctx.textAlign = 'left';
+
+          // Render Body Based on Simulation State
+          if (state === FLOW.IDLE || state === FLOW.COMPLETED) {
+            // Welcome / Tap Card Screen
+            ctx.fillStyle = '#0f172a';
+            ctx.font = '800 44px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(
+              state === FLOW.COMPLETED ? 'Thank You for Using SimplyGo!' : 'Welcome to SimplyGo',
+              W / 2, 200
+            );
+
+            ctx.fillStyle = '#475569';
+            ctx.font = '600 28px Inter, sans-serif';
+            ctx.fillText('Tap or Place Your Transit Card Flat on the NFC Tray Below', W / 2, 258);
+
+            // Animated-look card placement graphic box
+            ctx.fillStyle = '#e0f2f1';
+            ctx.beginPath();
+            ctx.roundRect(262, 305, 500, 175, 24);
+            ctx.fill();
+            ctx.strokeStyle = '#00897b';
+            ctx.lineWidth = 4;
+            ctx.stroke();
+
+            ctx.fillStyle = '#00695c';
+            ctx.font = '800 30px Inter, sans-serif';
+            ctx.fillText('((( • )))   PLACE CARD FLAT', W / 2, 385);
+            ctx.fillStyle = '#0f766e';
+            ctx.font = '600 22px Inter, sans-serif';
+            ctx.fillText('Accepts SimplyGo EZ-Link & Concession Cards', W / 2, 434);
+
+          } else if (state === FLOW.CARD_PLACED) {
+            // Step 1 Result: Card Detected + Balance $3.50 + 2 Action Buttons
+            ctx.fillStyle = '#00695c';
+            ctx.font = '800 36px Inter, sans-serif';
+            ctx.fillText('Welcome! Transit Card Detected', 48, 162);
+
+            // Balance Card
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.roundRect(48, 192, 440, 290, 22);
+            ctx.fill();
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            ctx.fillStyle = '#64748b';
+            ctx.font = '700 22px Inter, sans-serif';
+            ctx.fillText('CURRENT CARD BALANCE', 82, 248);
+
+            ctx.fillStyle = '#0f172a';
+            ctx.font = '900 84px Inter, sans-serif';
+            ctx.fillText('$3.50', 82, 348);
+
+            ctx.fillStyle = '#00897b';
+            ctx.font = '700 20px Inter, sans-serif';
+            ctx.fillText('● Card Status: Active on NFC Tray', 82, 438);
+
+            // Right Action Buttons: [Top-Up Stored Value] & [Check History]
+            ctx.fillStyle = '#00897b';
+            ctx.beginPath();
+            ctx.roundRect(528, 192, 448, 134, 22);
+            ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '800 34px Inter, sans-serif';
+            ctx.fillText('Top-Up Stored Value', 566, 256);
+            ctx.fillStyle = '#ccfbf1';
+            ctx.font = '600 20px Inter, sans-serif';
+            ctx.fillText('Tap here to add cash value  →', 566, 296);
+
+            ctx.fillStyle = '#1e293b';
+            ctx.beginPath();
+            ctx.roundRect(528, 348, 448, 134, 22);
+            ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '800 32px Inter, sans-serif';
+            ctx.fillText('Check History', 566, 412);
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '600 20px Inter, sans-serif';
+            ctx.fillText('View recent MRT & bus rides', 566, 452);
+
+          } else if (state === FLOW.TOPUP_SELECTED) {
+            // Step 2 Result: Prompt user to key in amount on 13" tilted numpad
+            ctx.fillStyle = '#0f172a';
+            ctx.font = '800 40px Inter, sans-serif';
+            ctx.fillText('Select Top-Up Amount', 48, 168);
+
+            ctx.fillStyle = '#475569';
+            ctx.font = '600 26px Inter, sans-serif';
+            ctx.fillText('Use the 13" tilted touch keypad on the right to choose an amount.', 48, 214);
+
+            // Summary Box
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.roundRect(48, 256, 928, 220, 24);
+            ctx.fill();
+            ctx.strokeStyle = '#00897b';
+            ctx.lineWidth = 4;
+            ctx.stroke();
+
+            ctx.fillStyle = '#64748b';
+            ctx.font = '700 22px Inter, sans-serif';
+            ctx.fillText('CURRENT BALANCE: $3.50', 88, 314);
+
+            ctx.fillStyle = '#00897b';
+            ctx.font = '800 44px Inter, sans-serif';
+            ctx.fillText('Tap +$10, +$20, or +$50 on Right Keypad  →', 88, 396);
+
+          } else if (state === FLOW.AMOUNT_ENTERED || state === FLOW.CASH_INSERTING) {
+            // Step 3 Result: Amount to Insert $10.00 + Flashing Cash Slot Prompt
+            ctx.fillStyle = '#0f172a';
+            ctx.font = '800 38px Inter, sans-serif';
+            ctx.fillText(
+              state === FLOW.CASH_INSERTING ? 'Validating Banknote & Updating Card...' : 'Insert Cash Payment',
+              48, 162
+            );
+
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.roundRect(48, 194, 928, 290, 24);
+            ctx.fill();
+            ctx.strokeStyle = '#10b981';
+            ctx.lineWidth = 5;
+            ctx.stroke();
+
+            ctx.fillStyle = '#475569';
+            ctx.font = '700 24px Inter, sans-serif';
+            ctx.fillText('AMOUNT TO INSERT', 88, 254);
+
+            ctx.fillStyle = '#00897b';
+            ctx.font = '900 88px Inter, sans-serif';
+            ctx.fillText('$10.00', 88, 354);
+
+            // Flashing slot notice pill
+            ctx.fillStyle = '#065f46';
+            ctx.beginPath();
+            ctx.roundRect(460, 232, 476, 152, 20);
+            ctx.fill();
+
+            ctx.fillStyle = '#6ee7b7';
+            ctx.font = '800 26px Inter, sans-serif';
+            ctx.fillText(
+              state === FLOW.CASH_INSERTING ? '● OPTICAL IR SENSOR ACTIVE' : '● FLASHING GREEN SLOT',
+              492, 286
+            );
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '700 24px Inter, sans-serif';
+            ctx.fillText(
+              state === FLOW.CASH_INSERTING ? 'Writing $13.50 to NFC Card...' : 'Please insert cash into the',
+              492, 328
+            );
+            if (state !== FLOW.CASH_INSERTING) {
+              ctx.fillText('flashing top-right slot.', 492, 360);
+            }
+
+            ctx.fillStyle = '#64748b';
+            ctx.font = '600 20px Inter, sans-serif';
+            ctx.fillText('Do not remove your transit card from the NFC tray.', 88, 444);
+
+          } else if (state === FLOW.TOPUP_SUCCESS) {
+            // Step 5: Top-Up Successful! New Balance: $13.50
+            ctx.fillStyle = '#059669';
+            ctx.beginPath();
+            ctx.roundRect(48, 134, 928, 368, 26);
+            ctx.fill();
+
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.font = '900 50px Inter, sans-serif';
+            ctx.fillText('✓  Top-Up Successful!', W / 2, 218);
+
+            ctx.fillStyle = '#d1fae5';
+            ctx.font = '700 26px Inter, sans-serif';
+            ctx.fillText('NEW CARD BALANCE', W / 2, 278);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '900 94px Inter, sans-serif';
+            ctx.fillText('$13.50', W / 2, 378);
+
+            ctx.fillStyle = '#fef08a';
+            ctx.font = '800 32px Inter, sans-serif';
+            ctx.fillText('Please collect your card from the tray.', W / 2, 456);
+          }
+
+          // Footer Status Bar
+          ctx.textAlign = 'left';
+          ctx.fillStyle = '#e2e8f0';
+          ctx.fillRect(0, H - 46, W, 46);
+          ctx.fillStyle = '#475569';
+          ctx.font = '600 18px Inter, sans-serif';
+          ctx.fillText('Module 1 Training Simulator  •  SimplyGo MRT Fare System', 32, H - 16);
+
+          texture.needsUpdate = true;
+        },
+
+        /** Dynamic 13-Inch Tilted 30° Touch Numpad Canvas (512x384) */
+        createNumpad13Screen() {
+          const canvas = document.createElement('canvas');
+          canvas.width = 512;
+          canvas.height = 384;
+          const texture = new THREE.CanvasTexture(canvas);
+          texture.anisotropy = 8;
+          return { canvas, ctx: canvas.getContext('2d'), texture };
+        },
+
+        renderNumpad13Screen(padObj, state) {
+          const { canvas, ctx, texture } = padObj;
+          const isActive = state >= FLOW.TOPUP_SELECTED && state < FLOW.COMPLETED;
+          const selectedTen = state >= FLOW.AMOUNT_ENTERED && state < FLOW.COMPLETED;
+
+          // High-contrast dark console background
+          ctx.fillStyle = isActive ? '#0f172a' : '#181f2a';
+          ctx.fillRect(0, 0, 512, 384);
+
+          // Top Amount Readout Bar
+          ctx.fillStyle = isActive ? '#1e293b' : '#232b38';
+          ctx.fillRect(16, 14, 480, 56);
+          ctx.strokeStyle = isActive ? '#009688' : '#334155';
+          ctx.lineWidth = 3;
+          ctx.strokeRect(16, 14, 480, 56);
+
+          ctx.fillStyle = isActive ? '#94a3b8' : '#64748b';
+          ctx.font = '700 16px Inter, sans-serif';
+          ctx.textAlign = 'left';
+          ctx.fillText(isActive ? 'TOP-UP NOMINAL' : 'KEYPAD STANDBY', 28, 48);
+
+          ctx.fillStyle = selectedTen ? '#34d399' : (isActive ? '#ffffff' : '#475569');
+          ctx.font = '800 32px Inter, sans-serif';
+          ctx.textAlign = 'right';
+          ctx.fillText(selectedTen ? '$10.00' : '$0.00', 480, 53);
+
+          // Left 3x4 Numeric Keypad (0-9, Cancel, Confirm)
+          const keys = [
+            '1', '2', '3',
+            '4', '5', '6',
+            '7', '8', '9',
+            'Cancel', '0', 'Confirm'
+          ];
+          keys.forEach((k, idx) => {
+            const col = idx % 3;
+            const row = Math.floor(idx / 3);
+            const x = 16 + col * 108;
+            const y = 84 + row * 72;
+            const w = 98;
+            const h = 62;
+
+            let bg = isActive ? '#334155' : '#262f3d';
+            let fg = isActive ? '#ffffff' : '#64748b';
+
+            if (k === 'Cancel') {
+              bg = isActive ? '#dc2626' : '#4c1d24';
+              fg = isActive ? '#ffffff' : '#9ca3af';
+            } else if (k === 'Confirm') {
+              bg = isActive ? '#059669' : '#144234';
+              fg = isActive ? '#ffffff' : '#9ca3af';
+            }
+
+            ctx.fillStyle = bg;
+            ctx.beginPath();
+            ctx.roundRect(x, y, w, h, 10);
+            ctx.fill();
+
+            ctx.fillStyle = fg;
+            ctx.font = k.length > 2 ? '800 18px Inter, sans-serif' : '800 26px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(k, x + w / 2, y + 40);
+          });
+
+          // Right Preset Top-Up Column (+$10, +$20, +$50)
+          const presets = ['+$10', '+$20', '+$50'];
+          presets.forEach((p, idx) => {
+            const x = 344;
+            const y = 84 + idx * 96;
+            const w = 152;
+            const h = 84;
+            const isHighlighted = selectedTen && p === '+$10';
+
+            ctx.fillStyle = isHighlighted
+              ? '#10b981'
+              : (isActive ? '#00897b' : '#1e3a3a');
+            ctx.beginPath();
+            ctx.roundRect(x, y, w, h, 12);
+            ctx.fill();
+
+            if (isHighlighted) {
+              ctx.strokeStyle = '#fef08a';
+              ctx.lineWidth = 5;
+              ctx.stroke();
+            }
+
+            ctx.fillStyle = isActive ? '#ffffff' : '#64748b';
+            ctx.font = '900 32px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(p, x + w / 2, y + 53);
+          });
+
+          // Dim overlay when in standby
+          if (!isActive) {
+            ctx.fillStyle = 'rgba(11, 18, 30, 0.42)';
+            ctx.fillRect(0, 0, 512, 384);
+          }
+
+          texture.needsUpdate = true;
+        }
+      };
+
+      /* =========================================================================
+       * 4. 3D KIOSK ARCHITECTURE BUILDER (Procedural PBR MeshStandardMaterial)
+       * ========================================================================= */
+      class SimplyGoKioskBuilder {
+        constructor(scene) {
+          this.scene = scene;
+          this.interactables = [];
+          this.refs = {};
+        }
+
+        registerInteractable(obj, actionId, tooltipText) {
+          obj.traverse((child) => {
+            if (child.isMesh) {
+              child.userData.actionId = actionId;
+              child.userData.tooltipText = tooltipText;
+              this.interactables.push(child);
+            }
+          });
+        }
+
+        buildEnvironment() {
+          // Hemisphere + Ambient station lighting
+          const hemi = new THREE.HemisphereLight(0xf1f5f9, 0x1e293b, 0.72);
+          hemi.position.set(0, 8, 0);
+          this.scene.add(hemi);
+
+          const ambient = new THREE.AmbientLight(0xdbeafe, 0.25);
+          this.scene.add(ambient);
+
+          // Main overhead directional station light casting crisp soft contact shadows
+          const keyLight = new THREE.DirectionalLight(0xffffff, 0.95);
+          keyLight.position.set(2.8, 5.4, 3.6);
+          keyLight.castShadow = true;
+          keyLight.shadow.mapSize.width = 2048;
+          keyLight.shadow.mapSize.height = 2048;
+          keyLight.shadow.camera.near = 0.5;
+          keyLight.shadow.camera.far = 16;
+          keyLight.shadow.camera.left = -2.8;
+          keyLight.shadow.camera.right = 2.8;
+          keyLight.shadow.camera.top = 2.8;
+          keyLight.shadow.camera.bottom = -2.8;
+          keyLight.shadow.bias = -0.0004;
+          this.scene.add(keyLight);
+
+          // Cool rim/back light so rear service panel & side casters read cleanly
+          const backLight = new THREE.DirectionalLight(0x93c5fd, 0.52);
+          backLight.position.set(-2.5, 3.2, -3.5);
+          this.scene.add(backLight);
+
+          // Subtle side fill light for caster inspection
+          const sideFill = new THREE.DirectionalLight(0xe2e8f0, 0.32);
+          sideFill.position.set(3.2, 1.4, -0.5);
+          this.scene.add(sideFill);
+
+          // Architectural MRT Concourse Floor at Y = 0
+          const floor = new THREE.Mesh(
+            new THREE.PlaneGeometry(16, 16),
+            new THREE.MeshStandardMaterial({
+              map: CanvasTextures.createFloorTexture(),
+              roughness: 0.72,
+              metalness: 0.14
+            })
+          );
+          floor.rotation.x = -Math.PI / 2;
+          floor.receiveShadow = true;
+          this.scene.add(floor);
+
+          // Subtle architectural floor demarcation ring around moveable kiosk footprint
+          const ringMat = new THREE.MeshBasicMaterial({
+            color: PALETTE.tealBright,
+            transparent: true,
+            opacity: 0.28,
+            side: THREE.DoubleSide
+          });
+          const ring = new THREE.Mesh(new THREE.RingGeometry(0.86, 0.885, 64), ringMat);
+          ring.rotation.x = -Math.PI / 2;
+          ring.position.y = 0.003;
+          this.scene.add(ring);
+        }
+
+        buildKiosk() {
+          const kioskGroup = new THREE.Group();
+          this.scene.add(kioskGroup);
+
+          // Shared PBR Materials matching the architectural reference drawings
+          const silverBodyMat = new THREE.MeshStandardMaterial({
+            color: PALETTE.silverBody,
+            roughness: 0.34,
+            metalness: 0.55
+          });
+          const silverBayMat = new THREE.MeshStandardMaterial({
+            color: PALETTE.silverBay,
+            roughness: 0.32,
+            metalness: 0.48
+          });
+          const silverInsetMat = new THREE.MeshStandardMaterial({
+            color: PALETTE.silverInset,
+            roughness: 0.42,
+            metalness: 0.45
+          });
+          const basePlinthMat = new THREE.MeshStandardMaterial({
+            color: PALETTE.basePlinth,
+            roughness: 0.48,
+            metalness: 0.45
+          });
+          const tealMat = new THREE.MeshStandardMaterial({
+            color: PALETTE.tealPrimary,
+            roughness: 0.32,
+            metalness: 0.18
+          });
+          const charcoalMat = new THREE.MeshStandardMaterial({
+            color: PALETTE.charcoal,
+            roughness: 0.52,
+            metalness: 0.3
+          });
+          const steelMat = new THREE.MeshStandardMaterial({
+            color: PALETTE.steel,
+            roughness: 0.24,
+            metalness: 0.82
+          });
+          const bezelMat = new THREE.MeshStandardMaterial({
+            color: PALETTE.bezelBlack,
+            roughness: 0.38,
+            metalness: 0.35
+          });
+          const seamMat = new THREE.MeshStandardMaterial({
+            color: 0x1c222a,
+            roughness: 0.65,
+            metalness: 0.2
+          });
+          const whiteStripeMat = new THREE.MeshStandardMaterial({
+            color: 0xffffff,
+            roughness: 0.26,
+            metalness: 0.1,
+            emissive: 0xffffff,
+            emissiveIntensity: 0.1
+          });
+
+          /* -------------------------------------------------------------------
+           * A. WEIGHTED LOW ANTI-TIP MOBILE BASE PLINTH (65mm floor clearance)
+           * ------------------------------------------------------------------- */
+          const plinthW = KIOSK.width + 0.10;
+          const plinthD = KIOSK.depth + 0.10;
+          const plinthR = 0.08;
+          const plinthShape = new THREE.Shape();
+          const pw = plinthW / 2;
+          const pd = plinthD / 2;
+          plinthShape.moveTo(-pw + plinthR, -pd);
+          plinthShape.lineTo(pw - plinthR, -pd);
+          plinthShape.absarc(pw - plinthR, -pd + plinthR, plinthR, -Math.PI / 2, 0, false);
+          plinthShape.lineTo(pw, pd - plinthR);
+          plinthShape.absarc(pw - plinthR, pd - plinthR, plinthR, 0, Math.PI / 2, false);
+          plinthShape.lineTo(-pw + plinthR, pd);
+          plinthShape.absarc(-pw + plinthR, pd - plinthR, plinthR, Math.PI / 2, Math.PI, false);
+          plinthShape.lineTo(-pw, -pd + plinthR);
+          plinthShape.absarc(-pw + plinthR, -pd + plinthR, plinthR, Math.PI, Math.PI * 1.5, false);
+
+          const plinthGeo = new THREE.ExtrudeGeometry(plinthShape, {
+            depth: 0.072,
+            bevelEnabled: true,
+            bevelThickness: 0.014,
+            bevelSize: 0.014,
+            bevelSegments: 4,
+            curveSegments: 16
+          });
+          // Rotate from XY to XZ horizontal slab sitting at Y = 0.065..0.155
+          plinthGeo.rotateX(Math.PI / 2);
+          plinthGeo.translate(0, KIOSK.skirtClearance + 0.086, 0.03);
+          const basePlinth = new THREE.Mesh(plinthGeo, basePlinthMat);
+          basePlinth.castShadow = true;
+          basePlinth.receiveShadow = true;
+          kioskGroup.add(basePlinth);
+
+          // Dark rubberized lower bumper seam around weighted base
+          const bumperRing = new THREE.Mesh(
+            new THREE.BoxGeometry(plinthW - 0.04, 0.016, plinthD - 0.04),
+            charcoalMat
+          );
+          bumperRing.position.set(0, KIOSK.skirtClearance + 0.008, 0.03);
+          kioskGroup.add(bumperRing);
+
+          /* -------------------------------------------------------------------
+           * B. 4 HEAVY-DUTY INDUSTRIAL SWIVEL CASTER WHEELS + DUAL-LOCK BRAKES
+           * ------------------------------------------------------------------- */
+          this.buildCasters(kioskGroup, steelMat, charcoalMat);
+
+          /* -------------------------------------------------------------------
+           * C. SCULPTED MONOLITHIC SIDE-PROFILE MAIN CABINET (Brushed Silver)
+           *    Extruded 2D side profile with smooth curves & beveled edges
+           * ------------------------------------------------------------------- */
+          const bodyW = KIOSK.width - 0.03;
+          const profileShape = new THREE.Shape();
+          // 2D x maps to +Z (front) after rotateY(-PI/2); 2D y maps to +Y (height)
+          profileShape.moveTo(-0.32, 0.145);                        // Bottom rear above base plinth
+          profileShape.lineTo(-0.32, 1.38);                         // Flat vertical rear thermal wall
+          profileShape.bezierCurveTo(-0.32, 1.66, -0.17, 1.77, 0.06, 1.77); // Sweeping curved rear hood
+          profileShape.quadraticCurveTo(0.24, 1.77, 0.275, 1.54);   // Rounded top crown to front header
+          profileShape.lineTo(0.328, 0.94);                         // 5° reclined upper display bay plane
+          profileShape.quadraticCurveTo(0.34, 0.915, 0.455, 0.855); // Forward-protruding sloped counter apron
+          profileShape.quadraticCurveTo(0.495, 0.83, 0.485, 0.775); // Rounded ergonomic waist nose
+          profileShape.quadraticCurveTo(0.44, 0.56, 0.355, 0.145);  // Tapered lower front pedestal
+          profileShape.closePath();
+
+          const bodyGeo = new THREE.ExtrudeGeometry(profileShape, {
+            depth: bodyW,
+            bevelEnabled: true,
+            bevelThickness: 0.016,
+            bevelSize: 0.014,
+            bevelSegments: 5,
+            curveSegments: 28
+          });
+          bodyGeo.translate(0, 0, -bodyW / 2);
+          bodyGeo.rotateY(-Math.PI / 2);
+
+          const mainMonolith = new THREE.Mesh(bodyGeo, silverBodyMat);
+          mainMonolith.castShadow = true;
+          mainMonolith.receiveShadow = true;
+          kioskGroup.add(mainMonolith);
+
+          // Subtle recessed darker metallic side contour accent panels (as seen in side reference)
+          const sideInsetShape = new THREE.Shape();
+          sideInsetShape.moveTo(-0.24, 0.22);
+          sideInsetShape.lineTo(-0.24, 1.24);
+          sideInsetShape.quadraticCurveTo(-0.14, 1.32, 0.21, 1.06);
+          sideInsetShape.quadraticCurveTo(0.38, 0.88, 0.39, 0.76);
+          sideInsetShape.lineTo(0.28, 0.22);
+          sideInsetShape.closePath();
+
+          const sideInsetGeo = new THREE.ExtrudeGeometry(sideInsetShape, {
+            depth: 0.008,
+            bevelEnabled: true,
+            bevelThickness: 0.003,
+            bevelSize: 0.003,
+            bevelSegments: 2,
+            curveSegments: 16
+          });
+          sideInsetGeo.rotateY(-Math.PI / 2);
+
+          [-1, 1].forEach((side) => {
+            const panel = new THREE.Mesh(sideInsetGeo, silverInsetMat);
+            panel.position.x = side * (bodyW / 2 + 0.014);
+            kioskGroup.add(panel);
+          });
+
+          // Subtle front-lower vertical panel seams framing the locked-down dust-filtered chassis door
+          [-0.41, 0.41].forEach((sx) => {
+            const lowerSeam = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.56, 0.008), seamMat);
+            lowerSeam.position.set(sx, 0.46, 0.42);
+            lowerSeam.rotation.x = 0.20;
+            kioskGroup.add(lowerSeam);
+          });
+          const waistSeam = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.005, 0.008), seamMat);
+          waistSeam.position.set(0, 0.74, 0.478);
+          kioskGroup.add(waistSeam);
+
+          /* -------------------------------------------------------------------
+           * D. VIBRANT TEAL ARCHED HEADER, WHITE PINSTRIPE & SIDE FRAME COLUMNS
+           * ------------------------------------------------------------------- */
+          const createArchShape = (w, h, r) => {
+            const s = new THREE.Shape();
+            const hw = w / 2;
+            s.moveTo(-hw, 0);
+            s.lineTo(hw, 0);
+            s.lineTo(hw, h - r);
+            s.absarc(hw - r, h - r, r, 0, Math.PI / 2, false);
+            s.lineTo(-hw + r, h);
+            s.absarc(-hw + r, h - r, r, Math.PI / 2, Math.PI, false);
+            s.lineTo(-hw, 0);
+            return s;
+          };
+
+          const headerW = KIOSK.width + 0.012;
+          const headerH = 0.265;
+          const headerR = 0.14;
+          const headerArchGeo = new THREE.ExtrudeGeometry(createArchShape(headerW, headerH, headerR), {
+            depth: 0.048,
+            bevelEnabled: true,
+            bevelThickness: 0.009,
+            bevelSize: 0.009,
+            bevelSegments: 4,
+            curveSegments: 28
+          });
+          const headerArch = new THREE.Mesh(headerArchGeo, tealMat);
+          headerArch.position.set(0, 1.515, 0.242);
+          headerArch.castShadow = true;
+          kioskGroup.add(headerArch);
+
+          // Crisp Inset White Pinstripe Contour following the teal arch curve
+          const outerPinstripe = createArchShape(headerW - 0.038, headerH - 0.022, headerR - 0.016);
+          const innerPinstripe = createArchShape(headerW - 0.056, headerH - 0.040, headerR - 0.024);
+          outerPinstripe.holes.push(innerPinstripe);
+
+          const stripeGeo = new THREE.ExtrudeGeometry(outerPinstripe, {
+            depth: 0.006,
+            bevelEnabled: false,
+            curveSegments: 28
+          });
+          const pinstripeMesh = new THREE.Mesh(stripeGeo, whiteStripeMat);
+          pinstripeMesh.position.set(0, 1.524, 0.296);
+          kioskGroup.add(pinstripeMesh);
+
+          // Backlit Translucent Header Plate ("SimplyGo / Top-Up Kiosk") centered on arch
+          const headerTex = CanvasTextures.createHeaderPlateTexture();
+          const headerPlate = new THREE.Mesh(
+            new THREE.PlaneGeometry(0.68, 0.155),
+            new THREE.MeshStandardMaterial({
+              map: headerTex,
+              emissiveMap: headerTex,
+              emissive: 0xffffff,
+              emissiveIntensity: 0.36,
+              roughness: 0.22,
+              metalness: 0.05
+            })
+          );
+          headerPlate.position.set(0, 1.645, 0.302);
+          kioskGroup.add(headerPlate);
+
+          // Thin dark horizontal seam separating the teal arch from the upper display bay
+          const archSeam = new THREE.Mesh(new THREE.BoxGeometry(headerW + 0.004, 0.012, 0.055), seamMat);
+          archSeam.position.set(0, 1.51, 0.272);
+          kioskGroup.add(archSeam);
+
+          // Vibrant Teal Side Frame Columns hugging left & right edges of upper display bay
+          [-1, 1].forEach((side) => {
+            const col = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.585, 0.055), tealMat);
+            col.position.set(side * (KIOSK.width / 2 - 0.016), 1.215, 0.305);
+            col.rotation.x = -5 * (Math.PI / 180);
+            col.castShadow = true;
+            kioskGroup.add(col);
+          });
+
+          // Inner Upper Display Bay: Brushed light-silver faceplate + vertical 60/40 bay seam
+          const upperBayGroup = new THREE.Group();
+          upperBayGroup.position.set(0, 1.215, 0.312);
+          upperBayGroup.rotation.x = -5 * (Math.PI / 180);
+
+          const bayFaceplate = new THREE.Mesh(new THREE.BoxGeometry(0.955, 0.57, 0.016), silverBayMat);
+          bayFaceplate.receiveShadow = true;
+          upperBayGroup.add(bayFaceplate);
+
+          // Clean vertical seam dividing left 60% screen bay and right 40% cash/numpad bay
+          const bayDividerSeam = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.56, 0.02), seamMat);
+          bayDividerSeam.position.set(0.115, 0, 0.002);
+          upperBayGroup.add(bayDividerSeam);
+
+          // Slightly recessed medium-grey surround panel behind the 27" screen
+          const screenSurround = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.45, 0.012), silverInsetMat);
+          screenSurround.position.set(-0.185, 0.01, 0.005);
+          upperBayGroup.add(screenSurround);
+
+          kioskGroup.add(upperBayGroup);
+
+          /* -------------------------------------------------------------------
+           * E. FLUSH RECESSED ERGONOMIC CAPSULE GRAB HANDLES (LEFT & RIGHT SIDES)
+           * ------------------------------------------------------------------- */
+          this.buildSideGrabHandles(kioskGroup, steelMat, bezelMat);
+
+          /* -------------------------------------------------------------------
+           * F. REAR THERMAL COMPARTMENT (Hinged Louvered Door + Slide-Out Filter)
+           * ------------------------------------------------------------------- */
+          this.buildRearServicePanel(kioskGroup, silverBodyMat, steelMat, bezelMat, seamMat);
+
+          /* ===================================================================
+           * G. STRICT ASYMMETRIC FRONT ELEVATION INTERACTIVE COMPONENTS
+           * =================================================================== */
+
+          // 1. LEFT SECTION (Eye Level): 27" LANDSCAPE TOUCHSCREEN (16:9, 5° upward tilt)
+          const main27Obj = CanvasTextures.createMain27Screen();
+          CanvasTextures.renderMain27Screen(main27Obj, FLOW.IDLE);
+          this.refs.main27 = main27Obj;
+
+          const screen27Group = new THREE.Group();
+          screen27Group.position.set(-0.185, 1.22, 0.332);
+          screen27Group.rotation.x = -5 * (Math.PI / 180);
+
+          const bezel27 = new THREE.Mesh(new THREE.BoxGeometry(0.555, 0.332, 0.028), bezelMat);
+          bezel27.castShadow = true;
+          screen27Group.add(bezel27);
+
+          const rim27 = new THREE.Mesh(new THREE.BoxGeometry(0.566, 0.342, 0.014), steelMat);
+          rim27.position.z = -0.007;
+          screen27Group.add(rim27);
+
+          const display27Mesh = new THREE.Mesh(
+            new THREE.PlaneGeometry(0.520, 0.2925), // Exact 16:9 landscape aspect
+            new THREE.MeshBasicMaterial({ map: main27Obj.texture })
+          );
+          display27Mesh.position.z = 0.015;
+          screen27Group.add(display27Mesh);
+
+          kioskGroup.add(screen27Group);
+          this.registerInteractable(screen27Group, 'screen27', '27" Main Touchscreen — Click to Select Top-Up');
+
+          // 2. TOP-RIGHT SECTION: BANKNOTE INSERTION SLOT (90mm x 6mm) + PULSING GREEN LED EARS
+          this.buildBanknoteSlot(kioskGroup, bezelMat, steelMat);
+
+          // 3. MID-TO-LOWER RIGHT SECTION: 13" TOUCH NUMPAD TILTED AT EXACTLY 30 DEGREES
+          this.buildTilted13Numpad(kioskGroup, silverInsetMat, steelMat, bezelMat);
+
+          // 4. LOWER CENTER SECTION: RECESSED BLUE NFC CARD CRADLE + 85mm x 54mm TRANSIT CARD
+          this.buildNfcTrayAndCard(kioskGroup, charcoalMat, steelMat, bezelMat);
+        }
+
+        buildCasters(parent, steelMat, charcoalMat) {
+          const rubberMat = new THREE.MeshStandardMaterial({ color: 0x181c22, roughness: 0.85, metalness: 0.06 });
+          const brakeRedMat = new THREE.MeshStandardMaterial({ color: PALETTE.brakeRed, roughness: 0.38, metalness: 0.15 });
+
+          const wheelRadius = 0.029; // Diameter 58mm + 7mm fork/plate = exact 65mm clearance
+          const offsets = [
+            [-0.43, -0.23],
+            [0.43, -0.23],
+            [-0.43, 0.29],
+            [0.43, 0.29]
+          ];
+
+          offsets.forEach(([cx, cz]) => {
+            const caster = new THREE.Group();
+            caster.position.set(cx, 0, cz);
+
+            const mountPlate = new THREE.Mesh(new THREE.BoxGeometry(0.088, 0.009, 0.088), steelMat);
+            mountPlate.position.y = KIOSK.skirtClearance - 0.0045;
+            caster.add(mountPlate);
+
+            const swivel = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.026, 0.012, 16), steelMat);
+            swivel.position.y = KIOSK.skirtClearance - 0.013;
+            caster.add(swivel);
+
+            [-0.020, 0.020].forEach((fx) => {
+              const arm = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.038, 0.028), steelMat);
+              arm.position.set(fx, 0.037, 0.006);
+              arm.rotation.x = 0.22;
+              caster.add(arm);
+            });
+
+            const wheel = new THREE.Mesh(new THREE.CylinderGeometry(wheelRadius, wheelRadius, 0.028, 24), rubberMat);
+            wheel.rotation.z = Math.PI / 2;
+            wheel.position.set(0, wheelRadius, 0.01);
+            wheel.castShadow = true;
+            caster.add(wheel);
+
+            const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.048, 12), steelMat);
+            hub.rotation.z = Math.PI / 2;
+            hub.position.set(0, wheelRadius, 0.01);
+            caster.add(hub);
+
+            // Dual-locking foot brake pedal tabs visible at corners
+            const brakeArm = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.008, 0.044), charcoalMat);
+            brakeArm.position.set(0, 0.041, -0.024);
+            brakeArm.rotation.x = -0.35;
+            caster.add(brakeArm);
+
+            const brakePedal = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.011, 0.030), brakeRedMat);
+            brakePedal.position.set(0, 0.034, -0.045);
+            brakePedal.rotation.x = -0.2;
+            caster.add(brakePedal);
+
+            caster.rotation.y = Math.atan2(cx, cz);
+            parent.add(caster);
+          });
+        }
+
+        buildSideGrabHandles(parent, steelMat, bezelMat) {
+          // Capsule / pill-shaped recessed ergonomic grab handles angled along sculpted side contour
+          const createCapsuleShape = (len, rad) => {
+            const s = new THREE.Shape();
+            const hl = len / 2;
+            s.moveTo(-hl, -rad);
+            s.lineTo(hl, -rad);
+            s.absarc(hl, 0, rad, -Math.PI / 2, Math.PI / 2, false);
+            s.lineTo(-hl, rad);
+            s.absarc(-hl, 0, rad, Math.PI / 2, Math.PI * 1.5, false);
+            return s;
+          };
+
+          const outerTrimGeo = new THREE.ExtrudeGeometry(createCapsuleShape(0.11, 0.028), { depth: 0.008, bevelEnabled: false, curveSegments: 16 });
+          const innerPocketGeo = new THREE.ExtrudeGeometry(createCapsuleShape(0.095, 0.020), { depth: 0.012, bevelEnabled: false, curveSegments: 16 });
+
+          [-1, 1].forEach((side) => {
+            const handleGroup = new THREE.Group();
+            // Positioned on the sculpted side panels just behind the forward waist curve
+            handleGroup.position.set(side * (KIOSK.width / 2 + 0.004), 0.90, 0.08);
+            handleGroup.rotation.y = side * (Math.PI / 2);
+            handleGroup.rotation.z = side * 0.58; // Angled gracefully along the side contour
+
+            const trim = new THREE.Mesh(outerTrimGeo, steelMat);
+            handleGroup.add(trim);
+
+            const pocket = new THREE.Mesh(innerPocketGeo, bezelMat);
+            pocket.position.z = 0.002;
+            handleGroup.add(pocket);
+
+            // Inner metallic ergonomic grip bar
+            const gripBar = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.11, 14), steelMat);
+            gripBar.rotation.z = Math.PI / 2;
+            gripBar.position.set(0, 0, 0.011);
+            handleGroup.add(gripBar);
+
+            parent.add(handleGroup);
+          });
+        }
+
+        buildRearServicePanel(parent, silverBodyMat, steelMat, bezelMat, seamMat) {
+          // Flat rear vertical wall at Z = -0.32
+          const rearGroup = new THREE.Group();
+          rearGroup.position.set(0, 0, -0.335);
+          rearGroup.rotation.y = Math.PI; // Facing -Z
+
+          // Large recessed rectangular hinged thermal compartment door
+          const doorBorder = new THREE.Mesh(new THREE.BoxGeometry(0.74, 0.96, 0.008), seamMat);
+          doorBorder.position.set(0, 0.78, 0.002);
+          rearGroup.add(doorBorder);
+
+          const doorPanel = new THREE.Mesh(new THREE.BoxGeometry(0.715, 0.935, 0.012), silverBodyMat);
+          doorPanel.position.set(0, 0.78, 0.005);
+          doorPanel.receiveShadow = true;
+          rearGroup.add(doorPanel);
+
+          // Vertical recessed latch handle on the left edge of the hinged door (viewed from rear)
+          const latchPocket = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.12, 0.016), bezelMat);
+          latchPocket.position.set(-0.31, 0.78, 0.011);
+          rearGroup.add(latchPocket);
+
+          const latchPull = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.088, 0.018), steelMat);
+          latchPull.position.set(-0.31, 0.78, 0.013);
+          rearGroup.add(latchPull);
+
+          // Array of 18 horizontal angled ventilation louvers casting crisp depth shadows
+          const louverBacking = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.78, 0.008), bezelMat);
+          louverBacking.position.set(0.03, 0.79, 0.009);
+          rearGroup.add(louverBacking);
+
+          for (let i = 0; i < 18; i++) {
+            const slat = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.016, 0.022), steelMat);
+            slat.position.set(0.03, 1.15 - i * 0.042, 0.017);
+            slat.rotation.x = 0.48; // Angled downward ventilation louver
+            slat.castShadow = true;
+            rearGroup.add(slat);
+          }
+
+          // Slide-Out Washable Dust Filter Tray Assembly at bottom of Rear Thermal Compartment
+          const filterTrayGroup = new THREE.Group();
+          filterTrayGroup.position.set(0.04, 0.195, 0.11);
+
+          // Low-profile brushed metallic tray chassis protruding neatly rearward
+          const trayFrame = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.036, 0.24), silverBodyMat);
+          trayFrame.castShadow = true;
+          trayFrame.receiveShadow = true;
+          filterTrayGroup.add(trayFrame);
+
+          const trayLipFront = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.044, 0.018), steelMat);
+          trayLipFront.position.set(0, 0.002, 0.118);
+          filterTrayGroup.add(trayLipFront);
+
+          // Small recessed pull slot on the filter tray handle face
+          const pullSlot = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.016, 0.012), bezelMat);
+          pullSlot.position.set(0, 0.002, 0.125);
+          filterTrayGroup.add(pullSlot);
+
+          // Fine ribbed washable mesh filter bed inside the tray
+          const meshBed = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.008, 0.20), bezelMat);
+          meshBed.position.set(0, 0.018, -0.005);
+          filterTrayGroup.add(meshBed);
+
+          for (let r = 0; r < 10; r++) {
+            const rib = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.005, 0.006), steelMat);
+            rib.position.set(0, 0.022, -0.085 + r * 0.018);
+            filterTrayGroup.add(rib);
+          }
+
+          rearGroup.add(filterTrayGroup);
+
+          // Master IEC AC Power Inlet Socket neatly positioned alongside the dust filter tray
+          const powerBox = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.075, 0.018), bezelMat);
+          powerBox.position.set(-0.37, 0.21, 0.01);
+          rearGroup.add(powerBox);
+
+          const iecRecess = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.032, 0.014), seamMat);
+          iecRecess.position.set(-0.39, 0.21, 0.016);
+          rearGroup.add(iecRecess);
+
+          const brassMat = new THREE.MeshStandardMaterial({ color: 0xfbbf24, metalness: 0.85, roughness: 0.2 });
+          [[-0.010, -0.004], [0.010, -0.004], [0, 0.007]].forEach(([px, py]) => {
+            const pin = new THREE.Mesh(new THREE.BoxGeometry(0.0035, 0.007, 0.012), brassMat);
+            pin.position.set(-0.39 + px, 0.21 + py, 0.02);
+            rearGroup.add(pin);
+          });
+
+          const rocker = new THREE.Mesh(
+            new THREE.BoxGeometry(0.026, 0.036, 0.016),
+            new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xdc2626, emissiveIntensity: 0.55 })
+          );
+          rocker.position.set(-0.335, 0.21, 0.018);
+          rocker.rotation.x = 0.18;
+          rearGroup.add(rocker);
+
+          parent.add(rearGroup);
+        }
+
+        buildBanknoteSlot(parent, bezelMat, steelMat) {
+          // TOP-RIGHT SECTION (Upper Right: X = +0.295, Y = 1.375) inside dark navy/slate bezel
+          const slotGroup = new THREE.Group();
+          slotGroup.position.set(0.295, 1.375, 0.312);
+          slotGroup.rotation.x = -5 * (Math.PI / 180);
+
+          const navyBezelMat = new THREE.MeshStandardMaterial({
+            color: PALETTE.slotNavy,
+            roughness: 0.36,
+            metalness: 0.25
+          });
+
+          // Sleek dark navy/slate outer housing bezel
+          const housing = new THREE.Mesh(new THREE.BoxGeometry(0.275, 0.145, 0.032), navyBezelMat);
+          housing.castShadow = true;
+          slotGroup.add(housing);
+
+          // Label Decal at top of navy bezel: "Insert Notes Face Up (SGD 2, 5, 10, 50)"
+          const labelPlate = new THREE.Mesh(
+            new THREE.PlaneGeometry(0.255, 0.056),
+            new THREE.MeshBasicMaterial({ map: CanvasTextures.createBanknoteLabelTexture() })
+          );
+          labelPlate.position.set(0, 0.038, 0.017);
+          slotGroup.add(labelPlate);
+
+          // Horizontal Mouth Opening (90mm x 6mm = 0.09m x 0.006m)
+          const mouth = new THREE.Mesh(
+            new THREE.BoxGeometry(0.092, 0.008, 0.038),
+            new THREE.MeshBasicMaterial({ color: 0x020406 })
+          );
+          mouth.position.set(0, -0.026, 0.004);
+          slotGroup.add(mouth);
+
+          // Translucent Flanking Guide Ears & Illuminated Green Bezel pulsing with Emerald Green LED
+          const earLedMat = new THREE.MeshStandardMaterial({
+            color: PALETTE.emeraldLed,
+            emissive: PALETTE.emeraldLed,
+            emissiveIntensity: 1.25,
+            transparent: true,
+            opacity: 0.9,
+            roughness: 0.15
+          });
+
+          [-0.068, 0.068].forEach((ex) => {
+            const ear = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.044, 0.042), earLedMat);
+            ear.position.set(ex, -0.026, 0.012);
+            slotGroup.add(ear);
+          });
+
+          const topLedBar = new THREE.Mesh(new THREE.BoxGeometry(0.118, 0.008, 0.014), earLedMat);
+          topLedBar.position.set(0, -0.006, 0.018);
+          slotGroup.add(topLedBar);
+
+          const botLedBar = new THREE.Mesh(new THREE.BoxGeometry(0.118, 0.008, 0.014), earLedMat);
+          botLedBar.position.set(0, -0.046, 0.018);
+          slotGroup.add(botLedBar);
+
+          // Local Emerald Green PointLight on the banknote slot
+          const slotLight = new THREE.PointLight(PALETTE.emeraldLed, 0.58, 0.78);
+          slotLight.position.set(0, -0.024, 0.085);
+          slotGroup.add(slotLight);
+
+          // 3D Toy SGD $10 Banknote (hidden until Step 4 cash insertion animation)
+          const billGeo = new THREE.BoxGeometry(0.078, 0.0012, 0.145);
+          const billMat = new THREE.MeshStandardMaterial({
+            map: CanvasTextures.createSgd10BanknoteTexture(),
+            roughness: 0.55,
+            metalness: 0.05
+          });
+          const banknote = new THREE.Mesh(billGeo, billMat);
+          banknote.visible = false;
+          banknote.position.set(0, -0.026, 0.14);
+          slotGroup.add(banknote);
+
+          parent.add(slotGroup);
+
+          this.refs.banknoteSlot = {
+            earLedMat,
+            slotLight,
+            banknote,
+            fastPulse: false
+          };
+
+          this.registerInteractable(slotGroup, 'banknoteSlot', 'Banknote Insertion Slot — Click to Insert SGD $10');
+        }
+
+        buildTilted13Numpad(parent, housingMat, steelMat, bezelMat) {
+          // MID-TO-LOWER RIGHT SECTION (Directly below banknote slot: X = +0.295, Y = 1.06)
+          const numpadObj = CanvasTextures.createNumpad13Screen();
+          CanvasTextures.renderNumpad13Screen(numpadObj, FLOW.IDLE);
+          this.refs.numpad13 = numpadObj;
+
+          const shelfGroup = new THREE.Group();
+          shelfGroup.position.set(0.295, 1.055, 0.355);
+
+          // Sculpted protruding ergonomic wedge housing matching the silver-grey cabinet contour
+          const wedgeShape = new THREE.Shape();
+          wedgeShape.moveTo(0, 0);
+          wedgeShape.lineTo(0.155, 0);
+          wedgeShape.lineTo(0.155, 0.052);
+          wedgeShape.lineTo(0, 0.142);
+          wedgeShape.closePath();
+
+          const wedgeGeo = new THREE.ExtrudeGeometry(wedgeShape, {
+            depth: 0.285,
+            bevelEnabled: true,
+            bevelSize: 0.008,
+            bevelThickness: 0.008,
+            bevelSegments: 3
+          });
+          wedgeGeo.rotateY(-Math.PI / 2);
+          wedgeGeo.translate(0.1425, -0.062, -0.055);
+
+          const wedgeMesh = new THREE.Mesh(wedgeGeo, housingMat);
+          wedgeMesh.castShadow = true;
+          wedgeMesh.receiveShadow = true;
+          shelfGroup.add(wedgeMesh);
+
+          // Brushed steel side accent cheeks
+          [-0.148, 0.148].forEach((sx) => {
+            const cheek = new THREE.Mesh(new THREE.BoxGeometry(0.007, 0.105, 0.145), steelMat);
+            cheek.position.set(sx, -0.01, 0.015);
+            shelfGroup.add(cheek);
+          });
+
+          // 13-Inch Touch Numpad Screen Tilted at EXACTLY 30 DEGREES toward user
+          const deckGroup = new THREE.Group();
+          deckGroup.position.set(0, 0.036, 0.025);
+          deckGroup.rotation.x = -30 * (Math.PI / 180);
+
+          const padBezel = new THREE.Mesh(new THREE.BoxGeometry(0.278, 0.205, 0.022), bezelMat);
+          padBezel.castShadow = true;
+          deckGroup.add(padBezel);
+
+          const padScreen = new THREE.Mesh(
+            new THREE.PlaneGeometry(0.252, 0.182),
+            new THREE.MeshBasicMaterial({ map: numpadObj.texture })
+          );
+          padScreen.position.z = 0.012;
+          deckGroup.add(padScreen);
+
+          shelfGroup.add(deckGroup);
+          parent.add(shelfGroup);
+
+          this.registerInteractable(deckGroup, 'numpad13', '13" Tilted Numpad — Click to Key-in +$10');
+        }
+
+        buildNfcTrayAndCard(parent, charcoalMat, steelMat, bezelMat) {
+          // LOWER CENTER SECTION (Dead-center horizontally X = 0.0 on the sloped counter apron)
+          const cradleTilt = 24 * (Math.PI / 180); // Follows the sloped ergonomic counter apron
+          const trayGroup = new THREE.Group();
+          trayGroup.position.set(0.0, 0.878, 0.422);
+          trayGroup.rotation.x = cradleTilt;
+
+          const blueOuterMat = new THREE.MeshStandardMaterial({
+            color: PALETTE.nfcBlue,
+            roughness: 0.32,
+            metalness: 0.18
+          });
+          const blueInnerMat = new THREE.MeshStandardMaterial({
+            color: PALETTE.nfcBlueDark,
+            roughness: 0.42,
+            metalness: 0.15
+          });
+
+          // Rounded-rectangle Recessed Blue NFC Card Cradle Cup (#1967B8)
+          const cw = 0.34;
+          const cd = 0.148;
+          const cr = 0.022;
+          const cupShape = new THREE.Shape();
+          cupShape.moveTo(-cw / 2 + cr, -cd / 2);
+          cupShape.lineTo(cw / 2 - cr, -cd / 2);
+          cupShape.absarc(cw / 2 - cr, -cd / 2 + cr, cr, -Math.PI / 2, 0, false);
+          cupShape.lineTo(cw / 2, cd / 2 - cr);
+          cupShape.absarc(cw / 2 - cr, cd / 2 - cr, cr, 0, Math.PI / 2, false);
+          cupShape.lineTo(-cw / 2 + cr, cd / 2);
+          cupShape.absarc(-cw / 2 + cr, cd / 2 - cr, cr, Math.PI / 2, Math.PI, false);
+          cupShape.lineTo(-cw / 2, -cd / 2 + cr);
+          cupShape.absarc(-cw / 2 + cr, -cd / 2 + cr, cr, Math.PI, Math.PI * 1.5, false);
+
+          const cupGeo = new THREE.ExtrudeGeometry(cupShape, {
+            depth: 0.022,
+            bevelEnabled: true,
+            bevelThickness: 0.005,
+            bevelSize: 0.005,
+            bevelSegments: 3,
+            curveSegments: 16
+          });
+          cupGeo.rotateX(Math.PI / 2);
+          cupGeo.translate(0, 0.011, 0);
+
+          const blueHousing = new THREE.Mesh(cupGeo, blueOuterMat);
+          blueHousing.castShadow = true;
+          blueHousing.receiveShadow = true;
+          trayGroup.add(blueHousing);
+
+          // Recessed inner dark-blue rim & embossed ((( • ))) + "Place Card Flat" plate
+          const cupSurface = new THREE.Mesh(
+            new THREE.PlaneGeometry(0.312, 0.126),
+            new THREE.MeshBasicMaterial({ map: CanvasTextures.createNfcTrayTexture() })
+          );
+          cupSurface.rotation.x = -Math.PI / 2;
+          cupSurface.position.y = 0.0168;
+          trayGroup.add(cupSurface);
+
+          // Bottom supporting lip along front edge of blue cradle
+          const frontLip = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.018, 0.012), blueInnerMat);
+          frontLip.position.set(0, 0.016, 0.068);
+          trayGroup.add(frontLip);
+
+          // Subtle Glowing Blue/Teal NFC Status Accent + Local PointLight
+          const nfcGlowMat = new THREE.MeshStandardMaterial({
+            color: 0x38bdf8,
+            emissive: 0x1967b8,
+            emissiveIntensity: 0.85,
+            roughness: 0.2
+          });
+          const nfcRing = new THREE.Mesh(new THREE.BoxGeometry(0.328, 0.005, 0.136), nfcGlowMat);
+          nfcRing.position.y = 0.013;
+          trayGroup.add(nfcRing);
+
+          const nfcLight = new THREE.PointLight(0x38bdf8, 0.48, 0.7);
+          nfcLight.position.set(0, 0.12, 0.03);
+          trayGroup.add(nfcLight);
+
+          parent.add(trayGroup);
+
+          // Accurately Scaled 85mm x 54mm (0.085m x 0.054m) 3D Singapore Transit Card
+          const cardGeo = new THREE.BoxGeometry(0.085, 0.0018, 0.054);
+          const cardTopMat = new THREE.MeshStandardMaterial({
+            map: CanvasTextures.createTransitCardTexture(),
+            roughness: 0.28,
+            metalness: 0.15
+          });
+          const cardEdgeMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.4 });
+          const cardMaterials = [
+            cardEdgeMat, cardEdgeMat,
+            cardTopMat, cardTopMat,
+            cardEdgeMat, cardEdgeMat
+          ];
+          const transitCard = new THREE.Mesh(cardGeo, cardMaterials);
+          transitCard.castShadow = true;
+
+          // Card Start Pose ("In User's Hand" hovering ready in front of blue cradle)
+          const cardHandPos = new THREE.Vector3(0.075, 1.01, 0.68);
+          const cardHandRot = new THREE.Euler(0.42, -0.15, 0.06);
+          // Card Seated Pose (Flat inside the right card slot of the sloped Blue NFC Cradle)
+          const cardTrayPos = new THREE.Vector3(0.072, 0.898, 0.427);
+          const cardTrayRot = new THREE.Euler(cradleTilt, 0, 0);
+
+          transitCard.position.copy(cardHandPos);
+          transitCard.rotation.copy(cardHandRot);
+          parent.add(transitCard);
+
+          this.refs.nfc = {
+            nfcGlowMat,
+            nfcLight,
+            transitCard,
+            cardHandPos,
+            cardHandRot,
+            cardTrayPos,
+            cardTrayRot
+          };
+
+          this.registerInteractable(trayGroup, 'nfcTray', 'Recessed Blue NFC Card Cradle — Click to Place Transit Card');
+          this.registerInteractable(transitCard, 'transitCard', 'SimplyGo Transit Card — Click to Place / Retrieve');
+        }
+      }
+
+      /* =========================================================================
+       * 5. SMOOTH CAMERA CONTROLLER (Cubic Ease-In-Out Tweening)
+       * ========================================================================= */
+      class CameraController {
+        constructor(camera, controls) {
+          this.camera = camera;
+          this.controls = controls;
+          this.tween = null;
+
+          this.controls.addEventListener('start', () => {
+            this.tween = null;
+          });
+        }
+
+        flyTo(presetKey, duration = 850) {
+          const preset = CAMERA_PRESETS[presetKey];
+          if (!preset) return;
+          this.tween = {
+            startPos: this.camera.position.clone(),
+            endPos: preset.pos.clone(),
+            startTarget: this.controls.target.clone(),
+            endTarget: preset.target.clone(),
+            startTime: performance.now(),
+            duration
+          };
+        }
+
+        update(now) {
+          if (this.tween) {
+            const elapsed = now - this.tween.startTime;
+            let t = Math.min(1, elapsed / this.tween.duration);
+            t = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+            this.camera.position.lerpVectors(this.tween.startPos, this.tween.endPos, t);
+            this.controls.target.lerpVectors(this.tween.startTarget, this.tween.endTarget, t);
+
+            if (elapsed >= this.tween.duration) {
+              this.tween = null;
+            }
+          }
+          this.controls.update();
+        }
+      }
+
+      /* =========================================================================
+       * 6. MAIN SIMULATION CONTROLLER (State Machine + Raycast + Animations)
+       * ========================================================================= */
+      class SimplyGoSimulationApp {
+        constructor() {
+          this.container = document.getElementById('canvas-container');
+          this.tooltip = document.getElementById('hover-tooltip');
+          this.audio = new KioskAudioEngine();
+          this.raycaster = new THREE.Raycaster();
+          this.pointer = new THREE.Vector2();
+          this.downPos = { x: 0, y: 0 };
+
+          this.state = FLOW.IDLE;
+          this.cardAnim = null;
+          this.billAnim = null;
+          this.irFlashUntil = 0;
+          this.toastTimer = null;
+
+          this.initThree();
+          this.builder = new SimplyGoKioskBuilder(this.scene);
+          this.builder.buildEnvironment();
+          this.builder.buildKiosk();
+
+          this.camCtrl = new CameraController(this.camera, this.controls);
+
+          this.bindHUD();
+          this.bindCanvasInteraction();
+          this.updateFlowUI();
+          this.onResize();
+        }
+
+        initThree() {
+          this.scene = new THREE.Scene();
+          this.scene.background = new THREE.Color(0x0f172a);
+          this.scene.fog = new THREE.FogExp2(0x0f172a, 0.065);
+
+          const w = this.container.clientWidth || window.innerWidth;
+          const h = this.container.clientHeight || window.innerHeight;
+
+          this.camera = new THREE.PerspectiveCamera(40, w / h, 0.05, 50);
+          this.camera.position.copy(CAMERA_PRESETS.front.pos);
+
+          this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+          this.renderer.setSize(w, h);
+          this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+          this.renderer.shadowMap.enabled = true;
+          this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+          this.renderer.outputEncoding = THREE.sRGBEncoding;
+          this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+          this.renderer.toneMappingExposure = 1.1;
+          this.container.appendChild(this.renderer.domElement);
+
+          this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
+          this.controls.enableDamping = true;
+          this.controls.dampingFactor = 0.07;
+          this.controls.minDistance = 0.72;
+          this.controls.maxDistance = 5.5;
+          this.controls.maxPolarAngle = Math.PI / 2 - 0.02;
+          this.controls.target.copy(CAMERA_PRESETS.front.target);
+          this.controls.update();
+        }
+
+        /* ---------------- Step-by-Step User Flow Actions ---------------- */
+
+        executeStep1PlaceCard() {
+          if (this.state !== FLOW.IDLE && this.state !== FLOW.COMPLETED) return;
+          const nfc = this.builder.refs.nfc;
+          this.state = FLOW.CARD_PLACED;
+
+          this.cardAnim = {
+            startPos: nfc.transitCard.position.clone(),
+            endPos: nfc.cardTrayPos.clone(),
+            startRot: nfc.transitCard.rotation.clone(),
+            endRot: nfc.cardTrayRot.clone(),
+            startTime: performance.now(),
+            duration: 520,
+            onDone: () => {
+              this.audio.playCardDetectBeep();
+              CanvasTextures.renderMain27Screen(this.builder.refs.main27, FLOW.CARD_PLACED);
+              this.showToast('Card Detected — Current Balance: $3.50', 'bg-teal-400');
+              this.updateFlowUI();
+            }
+          };
+          this.updateFlowUI();
+        }
+
+        executeStep2SelectTopUp() {
+          if (this.state !== FLOW.CARD_PLACED) {
+            this.showToast('First place your transit card on the NFC tray (Step 1).', 'bg-amber-400');
+            return;
+          }
+          this.state = FLOW.TOPUP_SELECTED;
+          this.audio.playSoftClick(920);
+          CanvasTextures.renderMain27Screen(this.builder.refs.main27, FLOW.TOPUP_SELECTED);
+          CanvasTextures.renderNumpad13Screen(this.builder.refs.numpad13, FLOW.TOPUP_SELECTED);
+          this.showToast('Top-Up Mode Selected — 13" Tilted Numpad Illuminated', 'bg-teal-400');
+          this.updateFlowUI();
+        }
+
+        executeStep3KeyInAmount() {
+          if (this.state !== FLOW.TOPUP_SELECTED) {
+            this.showToast('Select "Top-Up Stored Value" on the 27" screen first (Step 2).', 'bg-amber-400');
+            return;
+          }
+          this.state = FLOW.AMOUNT_ENTERED;
+          this.audio.playSoftClick(1160);
+          this.builder.refs.banknoteSlot.fastPulse = true;
+          CanvasTextures.renderMain27Screen(this.builder.refs.main27, FLOW.AMOUNT_ENTERED);
+          CanvasTextures.renderNumpad13Screen(this.builder.refs.numpad13, FLOW.AMOUNT_ENTERED);
+          this.showToast('Amount $10.00 Selected — Banknote Slot Flashing Fast', 'bg-emerald-400');
+          this.updateFlowUI();
+        }
+
+        executeStep4InsertCash() {
+          if (this.state !== FLOW.AMOUNT_ENTERED) {
+            this.showToast('Key-in +$10 on the 13" numpad first (Step 3).', 'bg-amber-400');
+            return;
+          }
+          this.state = FLOW.CASH_INSERTING;
+          const slot = this.builder.refs.banknoteSlot;
+          slot.banknote.visible = true;
+          slot.banknote.position.set(0, -0.008, 0.145);
+
+          CanvasTextures.renderMain27Screen(this.builder.refs.main27, FLOW.CASH_INSERTING);
+          this.audio.playCashIntakeSequence();
+          this.showToast('Feeding SGD $10 Note — Optical IR Sensor Writing Balance...', 'bg-emerald-400');
+
+          this.billAnim = {
+            startZ: 0.145,
+            endZ: -0.055,
+            startTime: performance.now(),
+            duration: 1120,
+            onDone: () => {
+              slot.banknote.visible = false;
+              slot.fastPulse = false;
+              this.irFlashUntil = performance.now() + 900;
+
+              // Automatically advance to Step 5 Ready: Card Updated!
+              this.state = FLOW.TOPUP_SUCCESS;
+              CanvasTextures.renderMain27Screen(this.builder.refs.main27, FLOW.TOPUP_SUCCESS);
+              CanvasTextures.renderNumpad13Screen(this.builder.refs.numpad13, FLOW.TOPUP_SUCCESS);
+              this.audio.playSuccessChime();
+              this.showToast('Top-Up Successful! New Balance: $13.50 — Collect Your Card', 'bg-emerald-400');
+              this.updateFlowUI();
+            }
+          };
+          this.updateFlowUI();
+        }
+
+        executeStep5TakeCard() {
+          if (this.state !== FLOW.TOPUP_SUCCESS) {
+            this.showToast('Complete cash insertion before retrieving your card (Step 4).', 'bg-amber-400');
+            return;
+          }
+          const nfc = this.builder.refs.nfc;
+          this.state = FLOW.COMPLETED;
+          this.audio.playSoftClick(1280);
+
+          this.cardAnim = {
+            startPos: nfc.transitCard.position.clone(),
+            endPos: nfc.cardHandPos.clone(),
+            startRot: nfc.transitCard.rotation.clone(),
+            endRot: nfc.cardHandRot.clone(),
+            startTime: performance.now(),
+            duration: 580,
+            onDone: () => {
+              CanvasTextures.renderMain27Screen(this.builder.refs.main27, FLOW.COMPLETED);
+              CanvasTextures.renderNumpad13Screen(this.builder.refs.numpad13, FLOW.COMPLETED);
+              this.showToast('Card Retrieved! Simulation Complete — Click Step 1 or Reset to Replay', 'bg-teal-400');
+              this.updateFlowUI();
+            }
+          };
+          this.updateFlowUI();
+        }
+
+        resetSimulation() {
+          this.audio.playSoftClick(780);
+          this.state = FLOW.IDLE;
+          this.cardAnim = null;
+          this.billAnim = null;
+          this.irFlashUntil = 0;
+
+          const nfc = this.builder.refs.nfc;
+          nfc.transitCard.position.copy(nfc.cardHandPos);
+          nfc.transitCard.rotation.copy(nfc.cardHandRot);
+
+          const slot = this.builder.refs.banknoteSlot;
+          slot.banknote.visible = false;
+          slot.fastPulse = false;
+
+          CanvasTextures.renderMain27Screen(this.builder.refs.main27, FLOW.IDLE);
+          CanvasTextures.renderNumpad13Screen(this.builder.refs.numpad13, FLOW.IDLE);
+          this.updateFlowUI();
+          this.showToast('Simulation Reset to Idle State', 'bg-slate-400');
+        }
+
+        /* ---------------- HUD State Synchronization ---------------- */
+
+        updateFlowUI() {
+          const instructions = {
+            [FLOW.IDLE]: 'Step 1: Place your SimplyGo transit card flat on the center NFC cradle tray.',
+            [FLOW.CARD_PLACED]: 'Step 2: Tap "Top-Up Stored Value" on the 27" landscape touchscreen.',
+            [FLOW.TOPUP_SELECTED]: 'Step 3: Key-in "+$10" on the 13" tilted 30° touch numpad.',
+            [FLOW.AMOUNT_ENTERED]: 'Step 4: Insert the SGD $10 banknote into the flashing top-right slot.',
+            [FLOW.CASH_INSERTING]: 'Processing banknote intake & writing new stored value to NFC card...',
+            [FLOW.TOPUP_SUCCESS]: 'Step 5: Balance updated to $13.50! Click "Take Card" or the card to retrieve.',
+            [FLOW.COMPLETED]: 'Training flow complete! Click Step 1 or Reset to run another session.'
+          };
+          document.getElementById('flow-instruction').textContent = instructions[this.state] || '';
+
+          // Determine which step button is currently active/next
+          let nextStep = 1;
+          if (this.state === FLOW.CARD_PLACED) nextStep = 2;
+          else if (this.state === FLOW.TOPUP_SELECTED) nextStep = 3;
+          else if (this.state === FLOW.AMOUNT_ENTERED || this.state === FLOW.CASH_INSERTING) nextStep = 4;
+          else if (this.state === FLOW.TOPUP_SUCCESS) nextStep = 5;
+          else if (this.state === FLOW.COMPLETED) nextStep = 1;
+
+          document.querySelectorAll('.step-btn').forEach((btn) => {
+            const stepNum = Number(btn.dataset.step);
+            const isNext = stepNum === nextStep && this.state !== FLOW.CASH_INSERTING;
+            const isDone =
+              (this.state === FLOW.COMPLETED) ||
+              (stepNum < nextStep && this.state !== FLOW.IDLE);
+
+            btn.classList.remove('step-active-glow', 'bg-[#00897B]', 'hover:bg-[#009688]', 'text-white', 'border-teal-300/40', 'bg-emerald-900/60', 'text-emerald-200', 'border-emerald-500/40', 'bg-slate-800/75', 'text-slate-300', 'border-slate-600/40');
+
+            if (isNext) {
+              btn.classList.add('step-active-glow', 'bg-[#00897B]', 'hover:bg-[#009688]', 'text-white', 'border-teal-300/40');
+            } else if (isDone) {
+              btn.classList.add('bg-emerald-900/60', 'text-emerald-200', 'border-emerald-500/40');
+            } else {
+              btn.classList.add('bg-slate-800/75', 'text-slate-300', 'border-slate-600/40');
+            }
+          });
+        }
+
+        showToast(message, dotColor = 'bg-teal-400') {
+          const toast = document.getElementById('toast');
+          document.getElementById('toast-msg').textContent = message;
+          document.getElementById('toast-dot').className = `w-2.5 h-2.5 rounded-full ${dotColor} shrink-0`;
+
+          toast.classList.remove('opacity-0', '-translate-y-2');
+          toast.classList.add('opacity-100', 'translate-y-0');
+
+          if (this.toastTimer) clearTimeout(this.toastTimer);
+          this.toastTimer = setTimeout(() => {
+            toast.classList.remove('opacity-100', 'translate-y-0');
+            toast.classList.add('opacity-0', '-translate-y-2');
+          }, 3000);
+        }
+
+        /* ---------------- Event Listeners ---------------- */
+
+        bindHUD() {
+          // Camera Preset Buttons
+          document.querySelectorAll('.cam-btn').forEach((btn) => {
+            btn.addEventListener('click', () => {
+              this.audio.playSoftClick(860);
+              const viewKey = btn.dataset.view;
+              this.camCtrl.flyTo(viewKey);
+
+              document.querySelectorAll('.cam-btn').forEach((b) => {
+                const active = b === btn;
+                b.className = active
+                  ? 'cam-btn px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer bg-[#00897B] text-white shadow-sm'
+                  : 'cam-btn px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer text-slate-200 hover:bg-slate-700/60';
+              });
+            });
+          });
+
+          // Step Action Buttons
+          document.getElementById('btn-step-1').addEventListener('click', () => this.executeStep1PlaceCard());
+          document.getElementById('btn-step-2').addEventListener('click', () => this.executeStep2SelectTopUp());
+          document.getElementById('btn-step-3').addEventListener('click', () => this.executeStep3KeyInAmount());
+          document.getElementById('btn-step-4').addEventListener('click', () => this.executeStep4InsertCash());
+          document.getElementById('btn-step-5').addEventListener('click', () => this.executeStep5TakeCard());
+
+          // Reset & Audio Mute
+          document.getElementById('btn-reset').addEventListener('click', () => this.resetSimulation());
+          document.getElementById('btn-audio').addEventListener('click', () => {
+            const muted = this.audio.toggleMute();
+            document.getElementById('icon-sound-on').classList.toggle('hidden', muted);
+            document.getElementById('icon-sound-off').classList.toggle('hidden', !muted);
+            this.showToast(muted ? 'Audio Muted' : 'Audio Enabled', muted ? 'bg-rose-400' : 'bg-teal-400');
+          });
+
+          window.addEventListener('resize', () => this.onResize());
+        }
+
+        bindCanvasInteraction() {
+          const dom = this.renderer.domElement;
+
+          dom.addEventListener('pointerdown', (e) => {
+            this.downPos = { x: e.clientX, y: e.clientY };
+          });
+
+          dom.addEventListener('pointermove', (e) => {
+            const rect = dom.getBoundingClientRect();
+            this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+            this.raycaster.setFromCamera(this.pointer, this.camera);
+            const hits = this.raycaster.intersectObjects(this.builder.interactables, false);
+
+            if (hits.length > 0) {
+              dom.style.cursor = 'pointer';
+              this.tooltip.textContent = hits[0].object.userData.tooltipText;
+              this.tooltip.style.left = `${e.clientX}px`;
+              this.tooltip.style.top = `${e.clientY}px`;
+              this.tooltip.style.opacity = '1';
+            } else {
+              dom.style.cursor = 'grab';
+              this.tooltip.style.opacity = '0';
+            }
+          });
+
+          dom.addEventListener('pointerleave', () => {
+            this.tooltip.style.opacity = '0';
+          });
+
+          dom.addEventListener('pointerup', (e) => {
+            // Ignore orbit drag gestures
+            if (Math.hypot(e.clientX - this.downPos.x, e.clientY - this.downPos.y) > 6) return;
+
+            const rect = dom.getBoundingClientRect();
+            this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+            this.raycaster.setFromCamera(this.pointer, this.camera);
+            const hits = this.raycaster.intersectObjects(this.builder.interactables, false);
+            if (hits.length === 0) return;
+
+            const action = hits[0].object.userData.actionId;
+            if (action === 'nfcTray') {
+              if (this.state === FLOW.TOPUP_SUCCESS) this.executeStep5TakeCard();
+              else this.executeStep1PlaceCard();
+            } else if (action === 'transitCard') {
+              if (this.state === FLOW.TOPUP_SUCCESS) this.executeStep5TakeCard();
+              else if (this.state === FLOW.IDLE || this.state === FLOW.COMPLETED) this.executeStep1PlaceCard();
+            } else if (action === 'screen27') {
+              this.executeStep2SelectTopUp();
+            } else if (action === 'numpad13') {
+              this.executeStep3KeyInAmount();
+            } else if (action === 'banknoteSlot') {
+              this.executeStep4InsertCash();
+            }
+          });
+        }
+
+        onResize() {
+          const w = this.container.clientWidth || window.innerWidth;
+          const h = this.container.clientHeight || window.innerHeight;
+          this.camera.aspect = w / h;
+          this.camera.updateProjectionMatrix();
+          this.renderer.setSize(w, h);
+        }
+
+        /* ---------------- Real-Time Animation Loop ---------------- */
+
+        updateAnimations(now) {
+          const sec = now * 0.001;
+
+          // 1. Banknote Slot Flanking Ears LED Pulsing (Normal vs Fast Pulse in Step 3)
+          const slot = this.builder.refs.banknoteSlot;
+          if (slot) {
+            const speed = slot.fastPulse ? 14.0 : 3.0;
+            const pulse = 0.5 + 0.5 * Math.sin(sec * speed);
+            slot.earLedMat.emissiveIntensity = slot.fastPulse ? (0.8 + pulse * 2.4) : (0.45 + pulse * 0.75);
+            slot.slotLight.intensity = slot.fastPulse ? (0.45 + pulse * 1.15) : (0.25 + pulse * 0.35);
+          }
+
+          // 2. NFC Cradle Glow & Optical IR Sensor Write Flash
+          const nfc = this.builder.refs.nfc;
+          if (nfc) {
+            if (now < this.irFlashUntil) {
+              const flash = Math.sin(sec * 28) > 0;
+              nfc.nfcGlowMat.emissive.setHex(flash ? 0x34d399 : 0x38bdf8);
+              nfc.nfcGlowMat.emissiveIntensity = 2.4;
+              nfc.nfcLight.intensity = 1.4;
+            } else {
+              const idlePulse = 0.5 + 0.5 * Math.sin(sec * 2.6);
+              nfc.nfcGlowMat.emissive.setHex(PALETTE.tealBright);
+              nfc.nfcGlowMat.emissiveIntensity = 0.55 + idlePulse * 0.45;
+              nfc.nfcLight.intensity = 0.35 + idlePulse * 0.25;
+            }
+
+            // Gentle idle float when card is ready in user's hand
+            if (!this.cardAnim && (this.state === FLOW.IDLE || this.state === FLOW.COMPLETED)) {
+              nfc.transitCard.position.y = nfc.cardHandPos.y + Math.sin(sec * 2.4) * 0.012;
+            }
+          }
+
+          // 3. Smooth Transit Card Glide Animation (Place on Tray / Lift to Hand)
+          if (this.cardAnim) {
+            const elapsed = now - this.cardAnim.startTime;
+            let t = Math.min(1, elapsed / this.cardAnim.duration);
+            const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+
+            const card = this.builder.refs.nfc.transitCard;
+            card.position.lerpVectors(this.cardAnim.startPos, this.cardAnim.endPos, ease);
+            // Slight vertical arc so card clears front tray lip naturally
+            card.position.y += Math.sin(ease * Math.PI) * 0.045;
+
+            card.rotation.set(
+              THREE.MathUtils.lerp(this.cardAnim.startRot.x, this.cardAnim.endRot.x, ease),
+              THREE.MathUtils.lerp(this.cardAnim.startRot.y, this.cardAnim.endRot.y, ease),
+              THREE.MathUtils.lerp(this.cardAnim.startRot.z, this.cardAnim.endRot.z, ease)
+            );
+
+            if (elapsed >= this.cardAnim.duration) {
+              const doneCb = this.cardAnim.onDone;
+              this.cardAnim = null;
+              if (doneCb) doneCb();
+            }
+          }
+
+          // 4. Smooth 3D SGD $10 Banknote Roller Intake Animation
+          if (this.billAnim) {
+            const elapsed = now - this.billAnim.startTime;
+            const t = Math.min(1, elapsed / this.billAnim.duration);
+            const ease = t * t * (3 - 2 * t);
+            const bill = this.builder.refs.banknoteSlot.banknote;
+            bill.position.z = THREE.MathUtils.lerp(this.billAnim.startZ, this.billAnim.endZ, ease);
+
+            if (elapsed >= this.billAnim.duration) {
+              const doneCb = this.billAnim.onDone;
+              this.billAnim = null;
+              if (doneCb) doneCb();
+            }
+          }
+        }
+
+        start() {
+          const animate = (now) => {
+            requestAnimationFrame(animate);
+            this.camCtrl.update(now);
+            this.updateAnimations(now);
+            this.renderer.render(this.scene, this.camera);
+          };
+          requestAnimationFrame(animate);
+        }
+      }
+
+      /* =========================================================================
+       * 7. BOOTSTRAP ON WINDOW LOAD
+       * ========================================================================= */
+      window.onload = function () {
+        try {
+          const app = new SimplyGoSimulationApp();
+          app.start();
+        } catch (err) {
+          console.error('Failed to initialize SimplyGo Kiosk 3D Simulation:', err);
+        }
+      };
+    })();
+  </script>
+</body>
+</html>
